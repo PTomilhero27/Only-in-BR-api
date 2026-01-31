@@ -1,0 +1,49 @@
+import { Global, Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { APP_GUARD } from '@nestjs/core';
+import { PrismaModule } from './prisma/prisma.module';
+import { ConfigModule } from '@nestjs/config';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { UsersModule } from './modules/user/user.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { FairsModule } from './modules/fairs/fairs.module';
+import { InterestsModule } from './modules/interests/interests.module';
+import { InterestFairsModule } from './modules/interest-fairs/interest-fairs.module';
+import { StallsModule } from './modules/stalls/stalls.module';
+import { ContractsModule } from './modules/contracts/contracts.module';
+import { ExhibitorAuthModule } from './modules/exhibitor-auth/exhibitor-auth.module';
+import { OwnersModule } from './modules/owners/owners.module';
+import { ExhibitorFairsModule } from './modules/exhibitor-fairs/exhibitor-fairs.module';
+import { PublicInterestsModule } from './modules/public/interests/public-interests.module';
+import { HealthModule } from './modules/health/health.module';
+
+
+@Global()
+@Module({
+  imports: [
+    HealthModule,
+    PrismaModule,
+    ConfigModule.forRoot({ isGlobal: true }),
+    UsersModule,
+    AuthModule,
+    FairsModule,
+    InterestsModule,
+    InterestFairsModule,
+    StallsModule,
+    ContractsModule,
+    ExhibitorAuthModule,
+    OwnersModule,
+    ExhibitorFairsModule,
+
+
+    
+    PublicInterestsModule
+  ],
+  controllers: [AppController],
+  providers: [
+    AppService,
+     { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
+})
+export class AppModule {}

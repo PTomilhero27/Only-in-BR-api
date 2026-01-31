@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: feira_gastro_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: feira_gastro
+    ports:
+      - "5432:5432"
+    volumes:
+      - feira_gastro_pg:/var/lib/postgresql/data
+
+volumes:
+  feira_gastro_pg:

@@ -1,0 +1,792 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum StallSize {
+  SIZE_2X2
+  SIZE_3X3
+  SIZE_3X6
+  TRAILER
+}
+
+enum StallType {
+  OPEN
+  CLOSED
+  TRAILER
+}
+
+enum UserRole {
+  ADMIN
+  EXHIBITOR
+}
+
+enum FairStatus {
+  ATIVA
+  FINALIZADA
+  CANCELADA
+}
+
+enum PersonType {
+  PF
+  PJ
+}
+
+enum BankAccountType {
+  CORRENTE
+  POUPANCA
+  PAGAMENTO
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum AuditEntity {
+  FAIR
+  USER
+  FORM
+  FAIR_FORM
+  CONTRACT
+  PAYMENT
+  OWNER_FAIR
+}
+
+/**
+ * Status operacional do expositor dentro da feira.
+ * Obs.: continua existindo mesmo com o módulo de contratos, pois é útil no dashboard.
+ */
+enum OwnerFairStatus {
+  SELECIONADO
+  AGUARDANDO_PAGAMENTO
+  AGUARDANDO_ASSINATURA
+  CONCLUIDO
+}
+
+/**
+ * Status editorial do template de documento (contrato/aditivo).
+ * - DRAFT: em edição
+ * - PUBLISHED: disponível para uso
+ * - ARCHIVED: não usar em novos vínculos (mantém histórico)
+ */
+enum DocumentTemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PasswordTokenType {
+  ACTIVATE_ACCOUNT
+  RESET_PASSWORD
+}
+
+enum OwnerFairPaymentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model User {
+  id String @id @default(uuid())
+
+  /**
+   * Nome exibido do usuário.
+   * Para EXHIBITOR pode ficar null (usamos Owner.fullName).
+   */
+  name String?
+
+  /**
+   * E-mail de login (único).
+   */
+  email String @unique
+
+  /**
+   * ✅ Hash da senha.
+   * - null => conta ainda não ativada (aguardando definição de senha).
+   */
+  password String?
+
+  /**
+   * Papel principal.
+   */
+  role UserRole @default(ADMIN)
+
+  /**
+   * ✅ Permite admin desativar o acesso sem deletar.
+   */
+  isActive Boolean @default(true)
+
+  /**
+   * ✅ Quando a senha foi definida (ativação concluída).
+   * Ajuda no admin para mostrar status "pendente" vs "ativo".
+   */
+  passwordSetAt DateTime?
+
+  /**
+   * Tokens de ativação e recuperação de senha
+   */
+  passwordTokens PasswordResetToken[]
+
+  /**
+   * ✅ Vínculo com Owner (expositor).
+   * Regra de negócio:
+   * - role EXHIBITOR => ownerId obrigatório (validar no service)
+   */
+  ownerId String?
+  owner   Owner?  @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  fairsCreated             Fair[]             @relation("FairsCreated")
+  auditLogs                AuditLog[]         @relation("UserAuditLogs")
+  documentTemplatesCreated DocumentTemplate[] @relation("DocumentTemplatesCreatedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fairContractSettings FairContractSettings[]
+
+  @@index([ownerId])
+  @@index([role])
+  @@index([isActive])
+}
+
+model PasswordResetToken {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /**
+   * ✅ Hash do token (segurança).
+   * Nunca armazenar o token puro no banco.
+   */
+  tokenHash String
+
+  /**
+   * ✅ Tipo do token: ativação ou reset.
+   */
+  type PasswordTokenType @default(RESET_PASSWORD)
+
+  /**
+   * Expiração curta (ex.: 30-60 minutos).
+   */
+  expiresAt DateTime
+
+  /**
+   * Uso único.
+   */
+  usedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([type])
+}
+
+// =====================
+// MÓDULO DE FEIRAS
+// =====================
+model Fair {
+  id     String     @id @default(uuid())
+  name   String
+  status FairStatus @default(ATIVA)
+
+  /**
+   * Endereço completo da feira.
+   * Mantido como string única por enquanto.
+   */
+  address String
+
+  stallsCapacity Int @default(0)
+
+  createdByUserId String
+  createdBy       User   @relation("FairsCreated", fields: [createdByUserId], references: [id])
+
+  /**
+   * Ocorrências (dias/horários) da feira.
+   */
+  occurrences FairOccurrence[]
+
+  /**
+   * Vínculos desta feira com interessados (Owner),
+   * incluindo a quantidade de barracas compradas por cada um.
+   */
+  ownerFairs OwnerFair[]
+
+  /**
+   * Vínculos deste formulário com feiras.
+   */
+  fairForms FairForm[]
+
+  /**
+   * Barracas vinculadas a esta feira (cada barraca pertence a um Owner).
+   */
+  stallFairs StallFair[]
+
+  /**
+   * ✅ Configuração do contrato principal da feira:
+   * Todos os expositores vinculados a esta feira usarão este template (sempre a última versão publicada).
+   */
+  contractSettings FairContractSettings?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdByUserId])
+}
+
+model FairOccurrence {
+  id     String @id @default(uuid())
+  fairId String
+
+  startsAt DateTime
+  endsAt   DateTime
+
+  fair Fair @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  @@unique([fairId, startsAt, endsAt])
+  @@index([fairId, startsAt])
+  @@index([startsAt, endsAt])
+}
+
+model Form {
+  id String @id @default(cuid())
+
+  /**
+   * Identificador lógico do formulário.
+   * Ex.: "stalls", "interests", "contracts"
+   */
+  slug String @unique
+
+  /**
+   * Nome exibido no painel admin.
+   */
+  name String
+
+  /**
+   * Permite desativar o form globalmente.
+   */
+  active Boolean @default(true)
+
+  /**
+   * Vínculos deste formulário com feiras.
+   */
+  fairForms FairForm[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FairForm {
+  id String @id @default(cuid())
+
+  fairId String
+  formId String
+
+  /**
+   * Ativa/desativa rapidamente o form para esta feira.
+   */
+  enabled Boolean @default(false)
+
+  /**
+   * Janela de liberação do formulário.
+   */
+  startsAt DateTime
+  endsAt   DateTime
+
+  fair Fair @relation(fields: [fairId], references: [id], onDelete: Cascade)
+  form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fairId, formId])
+  @@index([fairId])
+  @@index([formId])
+}
+
+// ---------------------------------------------
+// Owner = dono/expositor (entidade principal do domínio)
+// O Form 1 cria/atualiza apenas Owner.
+// ---------------------------------------------
+model Owner {
+  id String @id @default(cuid())
+
+  /**
+   * Tipo da pessoa:
+   * - PF: Pessoa Física (CPF)
+   * - PJ: Pessoa Jurídica (CNPJ)
+   */
+  personType PersonType
+
+  /**
+   * Documento principal do expositor (CPF ou CNPJ),
+   * sempre normalizado (somente dígitos).
+   * Regra:
+   * - Deve ser único no sistema.
+   */
+  document String @unique
+
+  /**
+   * Nome (PF) ou Razão Social (PJ).
+   */
+  fullName String?
+
+  /**
+   * Contato principal.
+   */
+  email String?
+  phone String?
+
+  /**
+   * Endereço (completo).
+   * Preenchido posteriormente no painel do expositor.
+   */
+  addressFull     String?
+  addressCity     String?
+  addressState    String?
+  addressZipcode  String?
+  addressNumber   String?
+  /**
+   * Dados financeiros (preenchidos depois).
+   */
+  pixKey          String?
+  bankName        String?
+  bankAgency      String?
+  bankAccount     String?
+  bankAccountType BankAccountType?
+
+  /**
+   * Titular da conta bancária.
+   * Pode ser diferente do Owner (ex.: sócio).
+   */
+  bankHolderDoc  String?
+  bankHolderName String?
+
+  /**
+   * Texto livre para triagem e entendimento da operação.
+   * Capturado já no cadastro inicial do portal.
+   */
+  stallsDescription String?
+
+  /**
+   * Vínculos deste expositor com feiras,
+   * registrando compras, status e contratos.
+   */
+  fairs OwnerFair[]
+
+  /**
+   * Barracas cadastradas por este expositor.
+   */
+  stalls Stall[]
+
+  /**
+   * ✅ Usuários que podem acessar o portal por este expositor.
+   * Decisão:
+   * - Começamos com 1 usuário por Owner,
+   * mas o modelo permite múltiplos (sócios, funcionários).
+   */
+  users User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([personType])
+}
+
+model OwnerFair {
+  id String @id @default(cuid())
+
+  ownerId String
+  fairId  String
+
+  /**
+   * Quantidade TOTAL de barracas compradas nesta feira.
+   * Regra de negócio:
+   * - stallsQty deve ser igual à soma de qty dos slots
+   */
+  stallsQty Int
+
+  status OwnerFairStatus @default(SELECIONADO)
+
+  paymentPlan OwnerFairPaymentPlan?
+
+  /**
+   * ✅ Marca que o contrato foi assinado (MVP).
+   * No futuro isso pode virar status derivado do Contract.
+   */
+  contractSignedAt DateTime?
+
+  owner Owner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  fair  Fair  @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Detalhamento da compra por tamanho.
+   */
+  stallSlots OwnerFairStallSlot[]
+
+  /**
+   * ✅ Contrato gerado para este expositor nesta feira.
+   */
+  contract Contract?
+
+  /**
+   * ✅ Aditivo opcional por expositor nesta feira (se existir).
+   */
+  addendum OwnerFairAddendum?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerId, fairId])
+  @@index([ownerId])
+  @@index([fairId])
+  @@index([status])
+}
+
+model OwnerFairStallSlot {
+  id String @id @default(cuid())
+
+  ownerFairId String
+
+  /**
+   * Tamanho da barraca comprado.
+   */
+  stallSize StallSize
+
+  /**
+   * Quantidade comprada deste tamanho.
+   */
+  qty Int
+
+  /**
+   * Valor UNITÁRIO pago por barraca deste tamanho (em centavos).
+   */
+  unitPriceCents Int
+
+  ownerFair OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerFairId, stallSize])
+  @@index([ownerFairId])
+}
+
+model OwnerFairPaymentPlan {
+  id String @id @default(cuid())
+
+  ownerFairId String    @unique
+  ownerFair   OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Valor total acordado (em centavos).
+   * Pode ser igual à soma dos slots ou negociado manualmente.
+   */
+  totalCents Int
+
+  /**
+   * Quantidade de parcelas (1 = à vista).
+   */
+  installmentsCount Int
+
+  /**
+   * Status agregado do plano (derivado das parcelas, mas útil para filtro/UX).
+   */
+  status OwnerFairPaymentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  installments OwnerFairInstallment[]
+}
+
+model OwnerFairInstallment {
+  id String @id @default(cuid())
+
+  planId String
+  plan   OwnerFairPaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  /**
+   * Número da parcela (1..N).
+   */
+  number Int
+
+  /**
+   * Data prevista do pagamento.
+   */
+  dueDate DateTime
+
+  /**
+   * Valor previsto da parcela (centavos).
+   */
+  amountCents Int
+
+  /**
+   * Quando foi pago.
+   * null => ainda não pago
+   */
+  paidAt DateTime?
+
+  /**
+   * Valor efetivamente pago (opcional).
+   * Útil se houver desconto, taxa, divergência ou pagamento parcial.
+   */
+  paidAmountCents Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([planId, number])
+  @@index([planId])
+  @@index([dueDate])
+  @@index([paidAt])
+}
+
+model Stall {
+  id      String @id @default(cuid())
+  ownerId String
+  owner   Owner  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  /**
+   * Nome interno/PDV da barraca (o que o usuário digita)
+   */
+  pdvName String
+
+  /**
+   * Versão normalizada para impedir duplicidade por Owner.
+   */
+  pdvNameNormalized String
+
+  machinesQty  Int     @default(0)
+  bannerName   String?
+  mainCategory String?
+
+  /**
+   * ✅ Tipo da barraca (OPEN/CLOSED/TRAILER)
+   */
+  stallType StallType @default(OPEN)
+
+  /**
+   * ✅ Tamanho da barraca (inclui TRAILER)
+   */
+  stallSize StallSize @default(SIZE_3X3)
+
+  teamQty Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fairs          StallFair[]
+  menuCategories StallMenuCategory[]
+  equipments     StallEquipment[]
+  powerNeed      StallPowerNeed?
+
+  @@unique([ownerId, pdvNameNormalized])
+  @@index([ownerId])
+}
+
+model StallFair {
+  id      String @id @default(cuid())
+  stallId String
+  fairId  String
+
+  stall Stall @relation(fields: [stallId], references: [id], onDelete: Cascade)
+  fair  Fair  @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([stallId, fairId])
+  @@index([fairId])
+  @@index([stallId])
+}
+
+model StallMenuCategory {
+  id      String @id @default(cuid())
+  stallId String
+  stall   Stall  @relation(fields: [stallId], references: [id], onDelete: Cascade)
+
+  name  String
+  order Int    @default(0)
+
+  products StallMenuProduct[]
+
+  @@index([stallId])
+}
+
+model StallMenuProduct {
+  id         String            @id @default(cuid())
+  categoryId String
+  category   StallMenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  name       String
+  priceCents Int
+  order      Int    @default(0)
+
+  @@index([categoryId])
+}
+
+model StallEquipment {
+  id      String @id @default(cuid())
+  stallId String
+  stall   Stall  @relation(fields: [stallId], references: [id], onDelete: Cascade)
+
+  name String
+  qty  Int    @default(1)
+
+  @@index([stallId])
+}
+
+model StallPowerNeed {
+  id      String @id @default(cuid())
+  stallId String @unique
+  stall   Stall  @relation(fields: [stallId], references: [id], onDelete: Cascade)
+
+  outlets110   Int @default(0)
+  outlets220   Int @default(0)
+  outletsOther Int @default(0)
+
+  /**
+   * ✅ necessidade de gás (GLP)
+   */
+  needsGas Boolean @default(false)
+  gasNotes String?
+
+  /**
+   * Observações gerais sobre infraestrutura
+   */
+  notes String?
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  action   AuditAction
+  entity   AuditEntity
+  entityId String
+
+  actorUserId String
+  actor       User   @relation("UserAuditLogs", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  before Json?
+  after  Json?
+  meta   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}
+
+// =====================
+// MÓDULO DE CONTRATOS
+// =====================
+
+model DocumentTemplate {
+  id String @id @default(uuid())
+
+  title           String
+  isAddendum      Boolean                @default(false)
+  hasRegistration Boolean                @default(true)
+  status          DocumentTemplateStatus @default(DRAFT)
+
+  /**
+   * ✅ Conteúdo do template (jsonb do editor)
+   * Ex.: array de blocos/cláusulas ou estrutura completa do editor.
+   */
+  content Json
+
+  /**
+   * ✅ Backrelations dos contratos (NÃO DUPLICAR NOMES)
+   */
+  mainContracts     Contract[] @relation("ContractMainTemplate")
+  addendumContracts Contract[] @relation("ContractAddendumTemplate")
+
+  createdByUserId    String?
+  createdBy          User?               @relation("DocumentTemplatesCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  ownerFairAddendums OwnerFairAddendum[] @relation("OwnerFairAddendumTemplate")
+
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  fairContractSettings FairContractSettings[]
+
+  @@index([status])
+  @@index([isAddendum])
+}
+
+model FairContractSettings {
+  id String @id @default(uuid())
+
+  fairId String @unique
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Template principal (não-aditivo) usado pela feira.
+   * Regra: deve ser isAddendum = false.
+   */
+  templateId String
+  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  updatedByUserId String?
+  updatedBy       User?   @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+}
+
+model Contract {
+  id String @id @default(uuid())
+
+  ownerFairId String    @unique
+  ownerFair   OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
+
+  templateId String
+  template   DocumentTemplate @relation("ContractMainTemplate", fields: [templateId], references: [id], onDelete: Restrict)
+
+  addendumTemplateId String?
+  addendumTemplate   DocumentTemplate? @relation("ContractAddendumTemplate", fields: [addendumTemplateId], references: [id], onDelete: Restrict)
+
+  pdfPath      String?
+  dataSnapshot Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+  @@index([addendumTemplateId])
+}
+
+model OwnerFairAddendum {
+  id String @id @default(uuid())
+
+  ownerFairId String    @unique
+  ownerFair   OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Template de aditivo (isAddendum = true).
+   */
+  templateId String
+  template   DocumentTemplate @relation("OwnerFairAddendumTemplate", fields: [templateId], references: [id], onDelete: Restrict)
+
+  /**
+   * Versão do aditivo escolhida.
+   * (Se você quiser sempre "última publicada", dá pra resolver no backend na geração.)
+   */
+  templateVersionNumber Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+}
