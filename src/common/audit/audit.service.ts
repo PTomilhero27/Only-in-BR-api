@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { AuditAction, AuditEntity } from '@prisma/client'
-import { PrismaTransaction } from 'prisma/prisma.types'
+import { PrismaTransaction } from 'src/prisma/prisma.types'
 
 /**
  * AuditService (genérico)

@@ -28,6 +28,16 @@ lerna-debug.log*
 .settings/
 *.sublime-workspace
 
+# build / ts incremental
+dist
+*.tsbuildinfo
+
+# não versionar artefatos gerados
+prisma/*.js
+prisma/*.js.map
+prisma/*.d.ts
+
+
 # IDE - VSCode
 .vscode/*
 !.vscode/settings.json
