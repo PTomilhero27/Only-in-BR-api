@@ -11,7 +11,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -20,7 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:sync": "prisma format && prisma migrate dev && prisma generate",
     "gen:module": "node scripts/gen-module.mjs",
-    "railway:start": "pnpm migrate:deploy && pnpm start:prod"
+    "railway:start": "pnpm exec prisma db push && pnpm start:prod"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
