@@ -133,3 +133,4 @@ export class DocumentTemplatesController {
     return this.service.remove(id);
   }
 }
+
