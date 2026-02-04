@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
+  BankAccountType,
   OwnerFairPaymentStatus,
   OwnerFairStatus,
   PersonType,
@@ -69,9 +70,11 @@ export class FairHeaderDto {
 }
 
 /**
- * DTO mínimo do Owner para tabela.
+ * DTO do Owner (expositor) para tabela e modal.
  * Responsabilidade:
- * - Exibir identificação e contato sem “vazar” campos sensíveis/irrelevantes.
+ * - Exibir identificação e contato.
+ * - ✅ Agora também expõe endereço + dados de pagamento para preencher o modal “Dados”.
+ * - Evitar “contratos implícitos”: se o front usa, o DTO documenta.
  */
 export class FairExhibitorOwnerDto {
   @ApiProperty({ example: 'ckv8l0t4w0001z9abcd1234xy' })
@@ -94,6 +97,72 @@ export class FairExhibitorOwnerDto {
 
   @ApiPropertyOptional({ example: '62916604667' })
   phone?: string | null
+
+  // ---------------------------------------------------------
+  // Endereço (seção “Endereço” do modal)
+  // ---------------------------------------------------------
+
+  @ApiPropertyOptional({
+    description: 'Endereço completo em formato livre (quando fornecido pelo expositor).',
+    example: 'Rua X, Setor Y, Goiânia - GO',
+  })
+  addressFull?: string | null
+
+  @ApiPropertyOptional({ example: 'Goiânia' })
+  addressCity?: string | null
+
+  @ApiPropertyOptional({ example: 'GO' })
+  addressState?: string | null
+
+  @ApiPropertyOptional({ example: '74000-000' })
+  addressZipcode?: string | null
+
+  @ApiPropertyOptional({ example: '123' })
+  addressNumber?: string | null
+
+  // ---------------------------------------------------------
+  // Pagamento (seção “Pagamento” do modal)
+  // ---------------------------------------------------------
+
+  @ApiPropertyOptional({
+    description: 'Chave Pix cadastrada pelo expositor.',
+    example: 'helo14vale@gmail.com',
+  })
+  pixKey?: string | null
+
+  @ApiPropertyOptional({ example: 'Banco do Brasil' })
+  bankName?: string | null
+
+  @ApiPropertyOptional({ example: '1234' })
+  bankAgency?: string | null
+
+  @ApiPropertyOptional({ example: '123456-7' })
+  bankAccount?: string | null
+
+  @ApiPropertyOptional({ enum: BankAccountType, example: BankAccountType.CORRENTE })
+  bankAccountType?: BankAccountType | null
+
+  @ApiPropertyOptional({
+    description: 'Documento do titular da conta (se diferente do expositor).',
+    example: '06877511107',
+  })
+  bankHolderDoc?: string | null
+
+  @ApiPropertyOptional({
+    description: 'Nome do titular da conta (se diferente do expositor).',
+    example: 'Heloisa Lima Vale',
+  })
+  bankHolderName?: string | null
+
+  // ---------------------------------------------------------
+  // Extra (útil para ficha/contrato e futuras telas)
+  // ---------------------------------------------------------
+
+  @ApiPropertyOptional({
+    description: 'Descrição geral do expositor/atividade (quando preenchida).',
+    example: 'Trabalho com pastel e caldo de cana.',
+  })
+  stallsDescription?: string | null
 }
 
 /**

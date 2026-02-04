@@ -7,6 +7,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// =====================
+// ENUMS
+// =====================
+
 enum StallSize {
   SIZE_2X2
   SIZE_3X3
@@ -56,24 +60,25 @@ enum AuditEntity {
   CONTRACT
   PAYMENT
   OWNER_FAIR
+  STALL_FAIR
+  OWNER_FAIR_PURCHASE
+  OWNER_FAIR_PURCHASE_PAYMENT
 }
 
 /**
  * Status operacional do expositor dentro da feira.
- * Obs.: continua existindo mesmo com o módulo de contratos, pois é útil no dashboard.
+ * Obs.: continua existindo com contratos/pagamentos pois é útil no dashboard.
  */
 enum OwnerFairStatus {
   SELECIONADO
   AGUARDANDO_PAGAMENTO
   AGUARDANDO_ASSINATURA
+  AGUARDANDO_BARRACAS
   CONCLUIDO
 }
 
 /**
  * Status editorial do template de documento (contrato/aditivo).
- * - DRAFT: em edição
- * - PUBLISHED: disponível para uso
- * - ARCHIVED: não usar em novos vínculos (mantém histórico)
  */
 enum DocumentTemplateStatus {
   DRAFT
@@ -126,7 +131,6 @@ model User {
 
   /**
    * ✅ Quando a senha foi definida (ativação concluída).
-   * Ajuda no admin para mostrar status "pendente" vs "ativo".
    */
   passwordSetAt DateTime?
 
@@ -137,7 +141,7 @@ model User {
 
   /**
    * ✅ Vínculo com Owner (expositor).
-   * Regra de negócio:
+   * Regra:
    * - role EXHIBITOR => ownerId obrigatório (validar no service)
    */
   ownerId String?
@@ -150,7 +154,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  fairContractSettings FairContractSettings[]
+  fairContractSettings                 FairContractSettings[]
+  ownerFairPurchaseInstallmentPayments OwnerFairPurchaseInstallmentPayment[]
 
   @@index([ownerId])
   @@index([role])
@@ -194,6 +199,7 @@ model PasswordResetToken {
 // =====================
 // MÓDULO DE FEIRAS
 // =====================
+
 model Fair {
   id     String     @id @default(uuid())
   name   String
@@ -205,6 +211,9 @@ model Fair {
    */
   address String
 
+  /**
+   * Capacidade total de barracas na feira.
+   */
   stallsCapacity Int @default(0)
 
   createdByUserId String
@@ -216,24 +225,24 @@ model Fair {
   occurrences FairOccurrence[]
 
   /**
-   * Vínculos desta feira com interessados (Owner),
-   * incluindo a quantidade de barracas compradas por cada um.
+   * Vínculos desta feira com expositores (Owner).
    */
   ownerFairs OwnerFair[]
 
   /**
-   * Vínculos deste formulário com feiras.
+   * Vínculos desta feira com formulários.
    */
   fairForms FairForm[]
 
   /**
-   * Barracas vinculadas a esta feira (cada barraca pertence a um Owner).
+   * Barracas vinculadas a esta feira.
+   * Importante:
+   * - Agora StallFair é a unidade de "compra/pagamento" por barraca.
    */
   stallFairs StallFair[]
 
   /**
-   * ✅ Configuração do contrato principal da feira:
-   * Todos os expositores vinculados a esta feira usarão este template (sempre a última versão publicada).
+   * ✅ Configuração do contrato principal da feira.
    */
   contractSettings FairContractSettings?
 
@@ -313,73 +322,45 @@ model FairForm {
   @@index([formId])
 }
 
-// ---------------------------------------------
-// Owner = dono/expositor (entidade principal do domínio)
-// O Form 1 cria/atualiza apenas Owner.
-// ---------------------------------------------
+// =====================
+// OWNER (EXPOSITOR)
+// =====================
+
 model Owner {
   id String @id @default(cuid())
 
-  /**
-   * Tipo da pessoa:
-   * - PF: Pessoa Física (CPF)
-   * - PJ: Pessoa Jurídica (CNPJ)
-   */
   personType PersonType
 
   /**
    * Documento principal do expositor (CPF ou CNPJ),
-   * sempre normalizado (somente dígitos).
-   * Regra:
-   * - Deve ser único no sistema.
+   * sempre normalizado (somente dígitos) e único.
    */
   document String @unique
 
-  /**
-   * Nome (PF) ou Razão Social (PJ).
-   */
   fullName String?
 
-  /**
-   * Contato principal.
-   */
   email String?
   phone String?
 
-  /**
-   * Endereço (completo).
-   * Preenchido posteriormente no painel do expositor.
-   */
-  addressFull     String?
-  addressCity     String?
-  addressState    String?
-  addressZipcode  String?
-  addressNumber   String?
-  /**
-   * Dados financeiros (preenchidos depois).
-   */
+  addressFull    String?
+  addressCity    String?
+  addressState   String?
+  addressZipcode String?
+  addressNumber  String?
+
   pixKey          String?
   bankName        String?
   bankAgency      String?
   bankAccount     String?
   bankAccountType BankAccountType?
 
-  /**
-   * Titular da conta bancária.
-   * Pode ser diferente do Owner (ex.: sócio).
-   */
   bankHolderDoc  String?
   bankHolderName String?
 
-  /**
-   * Texto livre para triagem e entendimento da operação.
-   * Capturado já no cadastro inicial do portal.
-   */
   stallsDescription String?
 
   /**
-   * Vínculos deste expositor com feiras,
-   * registrando compras, status e contratos.
+   * Vínculos deste expositor com feiras (âncora).
    */
   fairs OwnerFair[]
 
@@ -389,10 +370,7 @@ model Owner {
   stalls Stall[]
 
   /**
-   * ✅ Usuários que podem acessar o portal por este expositor.
-   * Decisão:
-   * - Começamos com 1 usuário por Owner,
-   * mas o modelo permite múltiplos (sócios, funcionários).
+   * Usuários que podem acessar o portal por este expositor.
    */
   users User[]
 
@@ -402,6 +380,10 @@ model Owner {
   @@index([personType])
 }
 
+// =====================
+// OWNER ↔ FAIR (ÂNCORA)
+// =====================
+
 model OwnerFair {
   id String @id @default(cuid())
 
@@ -409,19 +391,18 @@ model OwnerFair {
   fairId  String
 
   /**
-   * Quantidade TOTAL de barracas compradas nesta feira.
-   * Regra de negócio:
-   * - stallsQty deve ser igual à soma de qty dos slots
+   * ✅ Quantidade de barracas vinculadas/compradas para este expositor na feira.
+   * Decisão:
+   * - Continuamos persistindo por performance/UX.
+   * - Fonte de verdade operacional: quantidade de StallFair vinculadas neste OwnerFair.
+   * (no service você mantém isso sincronizado)
    */
-  stallsQty Int
+  stallsQty Int @default(0)
 
   status OwnerFairStatus @default(SELECIONADO)
 
-  paymentPlan OwnerFairPaymentPlan?
-
   /**
    * ✅ Marca que o contrato foi assinado (MVP).
-   * No futuro isso pode virar status derivado do Contract.
    */
   contractSignedAt DateTime?
 
@@ -429,9 +410,9 @@ model OwnerFair {
   fair  Fair  @relation(fields: [fairId], references: [id], onDelete: Cascade)
 
   /**
-   * Detalhamento da compra por tamanho.
+   * ✅ Barracas vinculadas (cada uma com preço/pagamento próprios).
    */
-  stallSlots OwnerFairStallSlot[]
+  stallFairs StallFair[]
 
   /**
    * ✅ Contrato gerado para este expositor nesta feira.
@@ -439,12 +420,13 @@ model OwnerFair {
   contract Contract?
 
   /**
-   * ✅ Aditivo opcional por expositor nesta feira (se existir).
+   * ✅ Aditivo opcional por expositor nesta feira.
    */
   addendum OwnerFairAddendum?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  ownerFairPurchases OwnerFairPurchase[]
 
   @@unique([ownerId, fairId])
   @@index([ownerId])
@@ -452,104 +434,9 @@ model OwnerFair {
   @@index([status])
 }
 
-model OwnerFairStallSlot {
-  id String @id @default(cuid())
-
-  ownerFairId String
-
-  /**
-   * Tamanho da barraca comprado.
-   */
-  stallSize StallSize
-
-  /**
-   * Quantidade comprada deste tamanho.
-   */
-  qty Int
-
-  /**
-   * Valor UNITÁRIO pago por barraca deste tamanho (em centavos).
-   */
-  unitPriceCents Int
-
-  ownerFair OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([ownerFairId, stallSize])
-  @@index([ownerFairId])
-}
-
-model OwnerFairPaymentPlan {
-  id String @id @default(cuid())
-
-  ownerFairId String    @unique
-  ownerFair   OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
-
-  /**
-   * Valor total acordado (em centavos).
-   * Pode ser igual à soma dos slots ou negociado manualmente.
-   */
-  totalCents Int
-
-  /**
-   * Quantidade de parcelas (1 = à vista).
-   */
-  installmentsCount Int
-
-  /**
-   * Status agregado do plano (derivado das parcelas, mas útil para filtro/UX).
-   */
-  status OwnerFairPaymentStatus @default(PENDING)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  installments OwnerFairInstallment[]
-}
-
-model OwnerFairInstallment {
-  id String @id @default(cuid())
-
-  planId String
-  plan   OwnerFairPaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  /**
-   * Número da parcela (1..N).
-   */
-  number Int
-
-  /**
-   * Data prevista do pagamento.
-   */
-  dueDate DateTime
-
-  /**
-   * Valor previsto da parcela (centavos).
-   */
-  amountCents Int
-
-  /**
-   * Quando foi pago.
-   * null => ainda não pago
-   */
-  paidAt DateTime?
-
-  /**
-   * Valor efetivamente pago (opcional).
-   * Útil se houver desconto, taxa, divergência ou pagamento parcial.
-   */
-  paidAmountCents Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([planId, number])
-  @@index([planId])
-  @@index([dueDate])
-  @@index([paidAt])
-}
+// =====================
+// STALLS
+// =====================
 
 model Stall {
   id      String @id @default(cuid())
@@ -557,57 +444,295 @@ model Stall {
   owner   Owner  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   /**
-   * Nome interno/PDV da barraca (o que o usuário digita)
+   * Nome interno/PDV da barraca.
+   * É exibido no painel/portal e também pode ser usado em etiquetas internas.
    */
   pdvName String
 
   /**
    * Versão normalizada para impedir duplicidade por Owner.
+   * Ex.: "Pastel do Zé" => "pastel-do-ze"
    */
   pdvNameNormalized String
 
-  machinesQty  Int     @default(0)
-  bannerName   String?
+  /**
+   * Quantidade de máquinas (fixo por barraca, não por feira).
+   */
+  machinesQty Int @default(0)
+
+  /**
+   * Nome do banner (opcional).
+   */
+  bannerName String?
+
+  /**
+   * Categoria principal (simples).
+   * Obs.: categorias detalhadas ficam em StallMenuCategory/StallMenuProduct.
+   */
   mainCategory String?
 
   /**
-   * ✅ Tipo da barraca (OPEN/CLOSED/TRAILER)
+   * Tipo operacional da barraca.
    */
   stallType StallType @default(OPEN)
 
   /**
-   * ✅ Tamanho da barraca (inclui TRAILER)
+   * Tamanho (usado para validar vínculo com o que foi comprado no Admin).
    */
   stallSize StallSize @default(SIZE_3X3)
 
+  /**
+   * Quantidade de pessoas na equipe.
+   */
   teamQty Int @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  fairs          StallFair[]
+  /**
+   * Vínculos dessa barraca com feiras (quando o expositor "seleciona" para uma feira).
+   */
+  fairs StallFair[]
+
+  /**
+   * Cardápio / estrutura do menu.
+   */
   menuCategories StallMenuCategory[]
-  equipments     StallEquipment[]
-  powerNeed      StallPowerNeed?
+
+  /**
+   * Equipamentos e infraestrutura.
+   */
+  equipments StallEquipment[]
+  powerNeed  StallPowerNeed?
 
   @@unique([ownerId, pdvNameNormalized])
   @@index([ownerId])
 }
 
 model StallFair {
-  id      String @id @default(cuid())
+  id String @id @default(cuid())
+
   stallId String
   fairId  String
 
+  /**
+   * Vínculo âncora do expositor na feira.
+   * Importante: StallFair sempre pertence a um OwnerFair.
+   */
+  ownerFairId String
+  ownerFair   OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Barraca real vinculada.
+   */
   stall Stall @relation(fields: [stallId], references: [id], onDelete: Cascade)
-  fair  Fair  @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Feira alvo do vínculo.
+   */
+  fair Fair @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Compra específica que está sendo "consumida" por essa barraca vinculada.
+   * Decisão de negócio:
+   * - Cada StallFair consome exatamente 1 unidade de 1 OwnerFairPurchase.
+   * - Por isso mantemos purchaseId obrigatório.
+   * onDelete: Restrict evita apagar uma compra que já esteja em uso.
+   */
+  purchaseId String
+  purchase   OwnerFairPurchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
 
+  /**
+   * Uma barraca não pode estar duas vezes na mesma feira.
+   */
   @@unique([stallId, fairId])
   @@index([fairId])
   @@index([stallId])
+  @@index([ownerFairId])
+  @@index([purchaseId])
 }
+
+model OwnerFairPurchase {
+  id String @id @default(cuid())
+
+  ownerFairId String
+  ownerFair   OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Tamanho comprado.
+   * Regras do domínio:
+   * - O Portal só pode vincular StallFair com stallSize compatível.
+   */
+  stallSize StallSize
+
+  /**
+   * Quantidade comprada.
+   * ✅ Para o fluxo atual (Admin adiciona "1 por 1"), recomenda-se:
+   * - qty = 1 sempre (validar no service)
+   * Isso mantém o controle financeiro por linha e melhora rastreabilidade.
+   */
+  qty Int
+
+  /**
+   * Preço unitário em centavos.
+   */
+  unitPriceCents Int
+
+  /**
+   * Total da compra em centavos.
+   * Regra: totalCents = qty * unitPriceCents (validar/calcular no service).
+   */
+  totalCents Int
+
+  /**
+   * Valor pago (entrada/sinal) em centavos.
+   * Regra: 0 <= paidCents <= totalCents.
+   */
+  paidCents Int @default(0)
+
+  /**
+   * Momento em que ficou 100% pago (opcional).
+   * Pode ser setado quando paidCents == totalCents.
+   */
+  paidAt DateTime?
+
+  /**
+   * Quantidade de parcelas do restante (0 se pago integralmente).
+   * Regra: se (totalCents - paidCents) > 0 => installmentsCount > 0.
+   */
+  installmentsCount Int @default(0)
+
+  /**
+   * Status financeiro desta compra.
+   * Deve ser recalculado no service conforme pago/vencimentos.
+   */
+  status OwnerFairPaymentStatus @default(PENDING)
+
+  /**
+   * Parcelas vinculadas a esta compra.
+   * Cada compra tem seu "plano" de vencimentos/valores.
+   */
+  installments OwnerFairPurchaseInstallment[]
+
+  /**
+   * Quantidade já consumida por vínculos reais (StallFair).
+   * Regras do domínio:
+   * - usedQty <= qty
+   * - Para o modelo "1 por 1", usedQty será 0 ou 1.
+   */
+  usedQty Int @default(0)
+
+  /**
+   * Barracas que estão consumindo esta compra.
+   */
+  stallFairs StallFair[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /**
+   * ✅ Removemos o @@unique para permitir múltiplas linhas,
+   * mesmo com mesmo tamanho e preço.
+   * Isso viabiliza controle financeiro 1 por 1 no Admin.
+   */
+  @@index([ownerFairId, stallSize])
+  @@index([ownerFairId, stallSize, unitPriceCents])
+  @@index([ownerFairId])
+  @@index([stallSize])
+  @@index([status])
+}
+
+model OwnerFairPurchaseInstallment {
+  id String @id @default(cuid())
+
+  purchaseId String
+  purchase   OwnerFairPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  /**
+   * Número sequencial da parcela (1..N).
+   */
+  number Int
+
+  /**
+   * Data de vencimento da parcela.
+   */
+  dueDate DateTime
+
+  /**
+   * Valor da parcela em centavos.
+   */
+  amountCents Int
+
+  /**
+   * Preenchido quando a parcela for marcada como paga.
+   */
+  paidAt DateTime?
+
+  /**
+   * Caso exista pagamento parcial/diferente do previsto.
+   */
+  paidAmountCents Int?
+
+  /**
+   * Histórico de pagamentos desta parcela.
+   * Fonte de verdade para pagamentos parciais.
+   */
+  payments OwnerFairPurchaseInstallmentPayment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /**
+   * Uma compra não pode ter duas parcelas com o mesmo número.
+   */
+  @@unique([purchaseId, number])
+  @@index([purchaseId])
+  @@index([dueDate])
+  @@index([paidAt])
+}
+
+model OwnerFairPurchaseInstallmentPayment {
+  id String @id @default(cuid())
+
+  installmentId String
+  installment   OwnerFairPurchaseInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  /**
+   * Data/hora do pagamento registrado.
+   * Obs.: no Admin podemos enviar date-only e normalizar pra 00:00Z.
+   */
+  paidAt DateTime
+
+  /**
+   * Valor pago em centavos neste pagamento.
+   * Suporta pagamentos parciais (múltiplos registros por parcela).
+   */
+  amountCents Int
+
+  /**
+   * Opcional: observação do acordo (ex.: "negociação, prorrogado", "pix", etc).
+   */
+  note String?
+
+  /**
+   * Usuário admin que registrou o pagamento.
+   * Restrict: não apagar usuário se houver histórico financeiro.
+   */
+  createdByUserId String
+  createdBy       User   @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([installmentId])
+  @@index([paidAt])
+  @@index([createdByUserId])
+}
+
+// =====================
+// STALL MENU / INFRA
+// =====================
 
 model StallMenuCategory {
   id      String @id @default(cuid())
@@ -623,7 +748,8 @@ model StallMenuCategory {
 }
 
 model StallMenuProduct {
-  id         String            @id @default(cuid())
+  id String @id @default(cuid())
+
   categoryId String
   category   StallMenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
@@ -654,17 +780,15 @@ model StallPowerNeed {
   outlets220   Int @default(0)
   outletsOther Int @default(0)
 
-  /**
-   * ✅ necessidade de gás (GLP)
-   */
   needsGas Boolean @default(false)
   gasNotes String?
 
-  /**
-   * Observações gerais sobre infraestrutura
-   */
   notes String?
 }
+
+// =====================
+// AUDITORIA
+// =====================
 
 model AuditLog {
   id String @id @default(uuid())
@@ -688,7 +812,7 @@ model AuditLog {
 }
 
 // =====================
-// MÓDULO DE CONTRATOS
+// CONTRATOS
 // =====================
 
 model DocumentTemplate {
@@ -700,23 +824,21 @@ model DocumentTemplate {
   status          DocumentTemplateStatus @default(DRAFT)
 
   /**
-   * ✅ Conteúdo do template (jsonb do editor)
-   * Ex.: array de blocos/cláusulas ou estrutura completa do editor.
+   * Conteúdo do template (jsonb do editor).
    */
   content Json
 
-  /**
-   * ✅ Backrelations dos contratos (NÃO DUPLICAR NOMES)
-   */
   mainContracts     Contract[] @relation("ContractMainTemplate")
   addendumContracts Contract[] @relation("ContractAddendumTemplate")
 
-  createdByUserId    String?
-  createdBy          User?               @relation("DocumentTemplatesCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByUserId String?
+  createdBy       User?   @relation("DocumentTemplatesCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
   ownerFairAddendums OwnerFairAddendum[] @relation("OwnerFairAddendumTemplate")
 
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   fairContractSettings FairContractSettings[]
 
   @@index([status])
@@ -760,6 +882,14 @@ model Contract {
   pdfPath      String?
   dataSnapshot Json?
 
+  // ✅ Assinafy
+  assinafyDocumentId String?
+  assinafySignerId   String?
+  signUrl            String?
+  signUrlExpiresAt   DateTime?
+
+  signedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -781,7 +911,6 @@ model OwnerFairAddendum {
 
   /**
    * Versão do aditivo escolhida.
-   * (Se você quiser sempre "última publicada", dá pra resolver no backend na geração.)
    */
   templateVersionNumber Int
 

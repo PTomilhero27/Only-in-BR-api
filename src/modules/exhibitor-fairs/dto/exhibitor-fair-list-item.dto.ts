@@ -1,92 +1,90 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
-import { IsArray, IsEnum, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator'
 import { FairStatus, OwnerFairStatus } from '@prisma/client'
+import { IsEnum, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator'
+import { Type } from 'class-transformer'
 
-import { ExhibitorFairStallSlotDto } from './exhibitor-fair-stall-slot.dto'
-import { ExhibitorFairLinkedStallDto } from './exhibitor-fair-linked-stall.dto'
 import { ExhibitorFairPaymentSummaryDto } from './exhibitor-fair-payment-summary.dto'
+import { ExhibitorFairContractSummaryDto } from './exhibitor-fair-contract-summary.dto'
+import { ExhibitorFairPurchaseDto } from './exhibitor-fair-purchase.dto'
+import { ExhibitorLinkedStallDto } from './exhibitor-linked-stall.dto'
 
 /**
- * Item da lista de feiras do expositor (para a tela).
+ * Item da listagem "Minhas Feiras" no Portal do Expositor.
  *
  * Responsabilidade:
- * - Traz tudo que o front precisa para renderizar a experiência do usuário:
- *   - dados da feira (nome/status)
- *   - status do expositor na feira (OwnerFair.status)
- *   - compra por tamanho (slots)
- *   - barracas já vinculadas
- *   - ✅ resumo do pagamento (plano/parcelas/status)
- *
- * Decisão:
- * - payment pode ser null/undefined se ainda não houver plano criado no admin.
+ * - Entregar ao front tudo que é necessário para renderizar:
+ *   - status operacional do expositor (OwnerFairStatus)
+ *   - contrato (status/link/pdf)
+ *   - compras (linhas) + consumo (usedQty)
+ *   - barracas vinculadas (StallFair) + purchase consumida
+ *   - resumo agregado de pagamentos
  */
 export class ExhibitorFairListItemDto {
-  @ApiProperty({ description: 'ID da feira.' })
+  @ApiProperty({ example: '5c4b9a3a-2d13-4c8b-9a4e-7d4f6a7e8b9c', description: 'ID da feira.' })
   @IsString()
-  fairId: string
+  fairId!: string
 
-  @ApiProperty({ description: 'Nome da feira.', example: 'Feira Gastronômica Only in BR - Janeiro' })
+  @ApiProperty({ example: 'Feira Gastronômica Only in BR', description: 'Nome da feira.' })
   @IsString()
-  fairName: string
+  fairName!: string
 
-  @ApiProperty({
-    enum: FairStatus,
-    description: 'Status administrativo da feira.',
-    example: 'ATIVA',
-  })
+  @ApiProperty({ enum: FairStatus, example: FairStatus.ATIVA, description: 'Status da feira.' })
   @IsEnum(FairStatus)
-  fairStatus: FairStatus
+  fairStatus!: FairStatus
 
   @ApiProperty({
     enum: OwnerFairStatus,
-    description: 'Status operacional do expositor dentro da feira.',
-    example: 'SELECIONADO',
+    example: OwnerFairStatus.SELECIONADO,
+    description: 'Status operacional do expositor na feira.',
   })
   @IsEnum(OwnerFairStatus)
-  ownerFairStatus: OwnerFairStatus
+  ownerFairStatus!: OwnerFairStatus
 
   @ApiProperty({
-    description: 'Quantidade total de barracas compradas nesta feira.',
     example: 3,
+    description: 'Quantidade total comprada/reservada (stallsQty no OwnerFair).',
   })
   @IsInt()
   @Min(0)
-  stallsQtyPurchased: number
+  stallsQtyPurchased!: number
 
-  @ApiProperty({
-    type: [ExhibitorFairStallSlotDto],
-    description: 'Compra detalhada por tamanho (slots).',
-  })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ExhibitorFairStallSlotDto)
-  stallSlots: ExhibitorFairStallSlotDto[]
-
-  @ApiProperty({
-    description: 'Quantidade de barracas já vinculadas nesta feira.',
-    example: 2,
-  })
+  @ApiProperty({ example: 1, description: 'Quantidade de barracas já vinculadas (StallFair).' })
   @IsInt()
   @Min(0)
-  stallsLinkedQty: number
+  stallsLinkedQty!: number
+
+  @ApiPropertyOptional({
+    type: ExhibitorFairContractSummaryDto,
+    description: 'Resumo do contrato desta feira (por expositor).',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ExhibitorFairContractSummaryDto)
+  contract!: ExhibitorFairContractSummaryDto | null
 
   @ApiProperty({
-    type: [ExhibitorFairLinkedStallDto],
-    description: 'Barracas já vinculadas pelo expositor nesta feira.',
+    type: [ExhibitorFairPurchaseDto],
+    description:
+      'Compras (linhas) registradas no Admin. O portal consome linha por linha ao vincular barracas.',
   })
-  @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => ExhibitorFairLinkedStallDto)
-  linkedStalls: ExhibitorFairLinkedStallDto[]
+  @Type(() => ExhibitorFairPurchaseDto)
+  purchases!: ExhibitorFairPurchaseDto[]
+
+  @ApiProperty({
+    type: [ExhibitorLinkedStallDto],
+    description: 'Barracas vinculadas nesta feira (cada uma consome uma compra).',
+  })
+  @ValidateNested({ each: true })
+  @Type(() => ExhibitorLinkedStallDto)
+  linkedStalls!: ExhibitorLinkedStallDto[]
 
   @ApiPropertyOptional({
     type: ExhibitorFairPaymentSummaryDto,
-    description:
-      'Resumo do pagamento do expositor nesta feira (parcelas, status, total, próxima data). Pode ser null se não existir plano.',
+    description: 'Resumo agregado de pagamento por feira (derivado das compras e parcelas).',
   })
   @IsOptional()
   @ValidateNested()
   @Type(() => ExhibitorFairPaymentSummaryDto)
-  payment?: ExhibitorFairPaymentSummaryDto | null
+  paymentSummary!: ExhibitorFairPaymentSummaryDto | null
 }

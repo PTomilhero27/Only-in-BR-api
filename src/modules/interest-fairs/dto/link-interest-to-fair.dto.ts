@@ -1,48 +1,41 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import {
-  ArrayMinSize,
-  IsArray,
-  IsNotEmpty,
-  IsString,
-  ValidateNested,
-} from 'class-validator';
-import { OwnerFairStallSlotDto } from './owner-fair-stall-slot.dto';
-import { OwnerFairPaymentPlanDto } from './owner-fair-payment-plan.dto';
+import { ApiProperty } from '@nestjs/swagger'
+import { ArrayMinSize, IsArray, IsString, ValidateNested } from 'class-validator'
+import { Type } from 'class-transformer'
+import { OwnerFairPurchaseDto } from './owner-fair-purchase.dto'
 
 /**
- * DTO para criar o vínculo Owner ↔ Fair.
- *
- * Regra do projeto:
- * - stallsQty NÃO é enviado: é derivado da soma dos slots.
- * - No create, SEMPRE enviar stallSlots + paymentPlan.
+ * DTO do fluxo do Admin:
+ * - Vincula interessado (Owner) a uma feira (OwnerFair)
+ * - Já salva as compras 1 por 1 (OwnerFairPurchase) e suas parcelas
  */
 export class LinkInterestToFairDto {
   @ApiProperty({
-    description: 'ID da feira a ser vinculada.',
-    example: 'e2afa654-2b99-4364-92e6-cce6643cc067',
+    example: 'b494d390-dfb5-43c0-84b0-479259c79694',
+    description: 'ID da feira (Fair).',
   })
   @IsString()
-  @IsNotEmpty()
-  fairId!: string;
+  fairId: string
 
   @ApiProperty({
+    type: [OwnerFairPurchaseDto],
     description:
-      'Compra de barracas por tamanho. Não repetir stallSize. qty >= 1. unitPriceCents >= 0.',
-    type: () => [OwnerFairStallSlotDto],
+      'Lista de compras 1 por 1 (cada item vira uma linha OwnerFairPurchase).',
+    example: [
+      {
+        stallSize: 'SIZE_3X3',
+        unitPriceCents: 300000,
+        paidCents: 100000,
+        installmentsCount: 2,
+        installments: [
+          { number: 1, dueDate: '2026-02-03', amountCents: 100000 },
+          { number: 2, dueDate: '2026-02-10', amountCents: 100000 },
+        ],
+      },
+    ],
   })
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => OwnerFairStallSlotDto)
-  stallSlots!: OwnerFairStallSlotDto[];
-
-  @ApiProperty({
-    description:
-      'Plano de pagamento (parcelas, datas, marcação de pago).',
-    type: () => OwnerFairPaymentPlanDto,
-  })
-  @ValidateNested()
-  @Type(() => OwnerFairPaymentPlanDto)
-  paymentPlan!: OwnerFairPaymentPlanDto;
+  @Type(() => OwnerFairPurchaseDto)
+  purchases: OwnerFairPurchaseDto[]
 }

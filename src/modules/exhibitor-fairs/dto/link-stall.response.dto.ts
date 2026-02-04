@@ -2,14 +2,10 @@ import { ApiProperty } from '@nestjs/swagger'
 import { IsBoolean } from 'class-validator'
 
 /**
- * Response simples para confirmar vínculo.
- * Ajuda o front a exibir toast e controlar estados.
+ * Response simples para ação de vincular.
  */
 export class LinkStallResponseDto {
-  @ApiProperty({
-    description: 'Indica se a operação foi concluída com sucesso.',
-    example: true,
-  })
+  @ApiProperty({ example: true, description: 'Indica sucesso da operação.' })
   @IsBoolean()
-  ok: boolean
+  ok!: boolean
 }

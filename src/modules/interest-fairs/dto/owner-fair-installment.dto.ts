@@ -1,58 +1,52 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { IsInt, IsOptional, IsString, Min } from 'class-validator'
 
 /**
- * DTO de uma parcela do plano de pagamento do vínculo Owner ↔ Fair.
- *
- * Convenção:
- * - dueDate: "YYYY-MM-DD"
- * - paidAt: "YYYY-MM-DD" (quando marcado como pago)
+ * DTO de parcela de uma compra (OwnerFairPurchaseInstallment).
  *
  * Observação:
- * - No banco, dueDate/paidAt são DateTime.
- * - No contrato HTTP usamos date-only (melhor para UI e validação).
+ * - dueDate é "date-only" (YYYY-MM-DD) para simplificar entrada no Admin.
+ * - paidAt também é "date-only" opcional (caso o admin marque como pago futuramente).
  */
 export class OwnerFairInstallmentDto {
   @ApiProperty({
-    description: 'Número da parcela (1..12).',
     example: 1,
+    description: 'Número sequencial da parcela (1..N).',
   })
   @IsInt()
   @Min(1)
-  @Max(12)
-  number!: number;
+  number: number
 
   @ApiProperty({
+    example: '2026-02-03',
     description: 'Data de vencimento (YYYY-MM-DD).',
-    example: '2026-01-30',
   })
   @IsString()
-  dueDate!: string;
+  dueDate: string
 
   @ApiProperty({
-    description: 'Valor previsto da parcela (em centavos).',
-    example: 400000,
+    example: 100000,
+    description: 'Valor da parcela em centavos.',
   })
   @IsInt()
   @Min(0)
-  amountCents!: number;
+  amountCents: number
 
   @ApiPropertyOptional({
-    description:
-      'Data em que a parcela foi paga (YYYY-MM-DD). Null/ausente = ainda não paga.',
-    example: '2026-01-30',
+    example: '2026-02-03',
+    description: 'Data em que foi paga (YYYY-MM-DD). Opcional.',
   })
   @IsOptional()
   @IsString()
-  paidAt?: string | null;
+  paidAt?: string | null
 
   @ApiPropertyOptional({
+    example: 100000,
     description:
-      'Valor efetivamente pago (em centavos). Útil para divergências/ajustes.',
-    example: 400000,
+      'Valor efetivamente pago em centavos (caso diferente do valor previsto). Opcional.',
   })
   @IsOptional()
   @IsInt()
   @Min(0)
-  paidAmountCents?: number | null;
+  paidAmountCents?: number | null
 }

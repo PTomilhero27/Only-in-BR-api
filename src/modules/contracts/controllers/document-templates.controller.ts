@@ -4,12 +4,15 @@ import { ListDocumentTemplatesDto } from '../dto/templates/list-document-templat
 import { DocumentTemplatesService } from '../services/document-templates.service';
 import { CreateDocumentTemplateDto } from '../dto/templates/create-document-template.dto';
 import { UpdateDocumentTemplateDto } from '../dto/templates/update-document-template.dto';
+import { UpsertFairContractSettingsDto } from '../dto/templates/upsert-fair-contract-settings.dto';
+import { type JwtPayload } from 'src/common/types/jwt-payload.type';
+import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 
 @ApiTags('DocumentTemplates')
 @ApiBearerAuth()
 @Controller('document-templates')
 export class DocumentTemplatesController {
-  constructor(private readonly service: DocumentTemplatesService) {}
+  constructor(private readonly service: DocumentTemplatesService) { }
 
   @Post()
   @ApiOperation({

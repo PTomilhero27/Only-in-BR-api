@@ -1,12 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateDocumentTemplateDto } from '../dto/templates/create-document-template.dto';
 import { ListDocumentTemplatesDto } from '../dto/templates/list-document-templates.dto';
 import { UpdateDocumentTemplateDto } from '../dto/templates/update-document-template.dto';
+import { UpsertFairContractSettingsDto } from '../dto/templates/upsert-fair-contract-settings.dto';
 
 @Injectable()
 export class DocumentTemplatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(dto: CreateDocumentTemplateDto) {
     const created = await this.prisma.documentTemplate.create({
@@ -146,6 +147,68 @@ export class DocumentTemplatesService {
     return this.prisma.documentTemplate.delete({ where: { id } });
   }
 
+
+  async upsert(fairId: string, dto: UpsertFairContractSettingsDto, actorUserId: string) {
+    const fair = await this.prisma.fair.findUnique({
+      where: { id: fairId },
+      select: { id: true },
+    });
+    if (!fair) throw new NotFoundException('Feira não encontrada.');
+
+    const template = await this.prisma.documentTemplate.findUnique({
+      where: { id: dto.templateId },
+      select: { id: true, isAddendum: true, status: true, title: true, updatedAt: true },
+    });
+    if (!template) throw new NotFoundException('Template não encontrado.');
+
+    if (template.isAddendum) {
+      throw new BadRequestException('Este template é um aditivo. Escolha um template principal (isAddendum=false).');
+    }
+
+    // ✅ Regra recomendada (se quiser travar em produção):
+    // if (template.status !== 'PUBLISHED') {
+    //   throw new BadRequestException('O template precisa estar PUBLISHED para ser vinculado à feira.');
+    // }
+
+    const saved = await this.prisma.fairContractSettings.upsert({
+      where: { fairId },
+      create: {
+        fairId,
+        templateId: dto.templateId,
+        updatedByUserId: actorUserId,
+      },
+      update: {
+        templateId: dto.templateId,
+        updatedByUserId: actorUserId,
+      },
+      select: {
+        id: true,
+        fairId: true,
+        templateId: true,
+        updatedAt: true,
+        updatedByUserId: true,
+        template: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            isAddendum: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    return {
+      ...saved,
+      updatedAt: saved.updatedAt.toISOString(),
+      template: {
+        ...saved.template,
+        updatedAt: saved.template.updatedAt.toISOString(),
+      },
+    };
+  }
+
   private async ensureExists(id: string) {
     const found = await this.prisma.documentTemplate.findUnique({
       where: { id },
@@ -153,4 +216,7 @@ export class DocumentTemplatesService {
     });
     if (!found) throw new NotFoundException('Template não encontrado.');
   }
+
+
+
 }

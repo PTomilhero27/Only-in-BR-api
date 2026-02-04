@@ -1,656 +1,504 @@
+// src/modules/interest-fairs/interest-fairs.service.ts
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { LinkInterestToFairDto } from './dto/link-interest-to-fair.dto';
-import { UpdateOwnerFairDto } from './dto/update-owner-fair.dto';
-import type { JwtPayload } from 'src/common/types/jwt-payload.type';
-import { AuditAction, AuditEntity, OwnerFairPaymentStatus, Prisma, StallSize } from '@prisma/client';
+} from '@nestjs/common'
+import { PrismaService } from 'src/prisma/prisma.service'
+import type { JwtPayload } from 'src/common/types/jwt-payload.type'
+import {
+  AuditAction,
+  AuditEntity,
+  OwnerFairPaymentStatus,
+  Prisma,
+  StallSize,
+} from '@prisma/client'
 
+import { LinkInterestToFairDto } from './dto/link-interest-to-fair.dto'
+import { PatchOwnerFairPurchasesDto } from './dto/patch-owner-fair-purchases.dto'
 
 /**
- * Service que centraliza a regra de negócio do vínculo Owner ↔ Fair.
+ * ✅ InterestFairsService (ADMIN)
  *
- * Regras:
- * - stallsQty é DERIVADO da soma de stallSlots
- * - persiste Plano de Pagamento + Parcelas
- * - valida capacidade da feira (stallsCapacity) no create e no update
+ * Responsabilidade:
+ * - Criar/remover vínculo Owner↔Fair (OwnerFair)
+ * - No momento da criação, registrar as compras 1 por 1 (OwnerFairPurchase) e parcelas
  *
- * Capacidade (decisão A):
- * - "reservado" = soma de OwnerFair.stallsQty na feira
+ * Decisões importantes:
+ * - Cada compra é uma linha independente (não agrupar)
+ * - Para simplificar controle financeiro, forçamos qty = 1 por compra
+ * - Atualizamos OwnerFair.stallsQty = número de compras (linhas)
  */
 @Injectable()
 export class InterestFairsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // ---------------------------------------------
-  // Helpers: Slots
+  // Helpers
   // ---------------------------------------------
-  private validateAndSumSlots(
-    slots: Array<{ stallSize: StallSize; qty: number; unitPriceCents: number }>,
-  ): number {
-    if (!slots || slots.length === 0) {
-      throw new BadRequestException(
-        'Informe ao menos um tamanho na compra de barracas.',
-      );
-    }
-
-    const seen = new Set<StallSize>();
-    let total = 0;
-
-    for (const s of slots) {
-      if (seen.has(s.stallSize)) {
-        throw new BadRequestException(
-          'Não é permitido repetir o mesmo tamanho de barraca.',
-        );
-      }
-      seen.add(s.stallSize);
-
-      if (!Number.isInteger(s.qty) || s.qty < 1) {
-        throw new BadRequestException('qty deve ser inteiro >= 1.');
-      }
-
-      if (!Number.isInteger(s.unitPriceCents) || s.unitPriceCents < 0) {
-        throw new BadRequestException('unitPriceCents deve ser inteiro >= 0.');
-      }
-
-      total += s.qty;
-    }
-
-    if (total < 1 || total > 100) {
-      throw new BadRequestException(
-        'O total de barracas (soma das quantidades por tamanho) deve ficar entre 1 e 100.',
-      );
-    }
-
-    return total;
-  }
-
-  private sumSlotsTotalCents(
-    slots: Array<{ qty: number; unitPriceCents: number }>,
-  ): number {
-    return slots.reduce((acc, s) => {
-      const qty = Number.isFinite(s.qty) ? s.qty : 0;
-      const unit = Number.isFinite(s.unitPriceCents) ? s.unitPriceCents : 0;
-      return acc + qty * unit;
-    }, 0);
-  }
-
-  // ---------------------------------------------
-  // Helpers: Capacidade
-  // ---------------------------------------------
-  private async assertFairCapacity(params: {
-    fairId: string;
-    stallsQtyToReserve: number;
-    /**
-     * Se for UPDATE: passe o id do OwnerFair atual pra excluir do "reservado"
-     */
-    excludeOwnerFairId?: string;
-  }) {
-    const fair = await this.prisma.fair.findUnique({
-      where: { id: params.fairId },
-      select: { id: true, stallsCapacity: true },
-    });
-
-    if (!fair) throw new NotFoundException('Feira não encontrada.');
-
-    if (!Number.isInteger(fair.stallsCapacity) || fair.stallsCapacity <= 0) {
-      throw new BadRequestException(
-        'Esta feira ainda não possui capacidade configurada. Defina stallsCapacity no cadastro da feira.',
-      );
-    }
-
-    if (
-      !Number.isInteger(params.stallsQtyToReserve) ||
-      params.stallsQtyToReserve < 1
-    ) {
-      throw new BadRequestException('A compra deve ter ao menos 1 barraca.');
-    }
-
-    const reservedAgg = await this.prisma.ownerFair.aggregate({
-      where: {
-        fairId: params.fairId,
-        ...(params.excludeOwnerFairId
-          ? { id: { not: params.excludeOwnerFairId } }
-          : {}),
-      },
-      _sum: { stallsQty: true },
-    });
-
-    const reserved = reservedAgg._sum.stallsQty ?? 0;
-    const remaining = Math.max(0, fair.stallsCapacity - reserved);
-
-    if (params.stallsQtyToReserve > remaining) {
-      throw new BadRequestException(
-        `A compra (${params.stallsQtyToReserve}) ultrapassa as vagas restantes da feira (${remaining}).`,
-      );
-    }
-
-    return { capacity: fair.stallsCapacity, reserved, remaining };
-  }
-
-  // ---------------------------------------------
-  // Helpers: Payment Plan
-  // ---------------------------------------------
-  private parseDateOnlyOrThrow(value: string, fieldName: string): Date {
-    // Esperado: YYYY-MM-DD
-    if (!value || typeof value !== 'string') {
-      throw new BadRequestException(`Informe ${fieldName}.`);
-    }
-
-    // "YYYY-MM-DD" -> "YYYY-MM-DDT00:00:00.000Z"
-    const iso = `${value}T00:00:00.000Z`;
-    const d = new Date(iso);
-
-    if (Number.isNaN(d.getTime())) {
-      throw new BadRequestException(`${fieldName} inválido: "${value}".`);
-    }
-    return d;
-  }
-
-  private computePaymentStatus(input: {
-    installments: Array<{ dueDate: Date; paidAt: Date | null }>;
-  }): OwnerFairPaymentStatus {
-    const now = new Date();
-    const total = input.installments.length;
-    const paid = input.installments.filter((i) => !!i.paidAt).length;
-
-    if (total === 0) return OwnerFairPaymentStatus.PENDING;
-
-    const anyOverdue = input.installments.some(
-      (i) => !i.paidAt && i.dueDate < now,
-    );
-
-    if (paid === 0) return anyOverdue ? OwnerFairPaymentStatus.OVERDUE : OwnerFairPaymentStatus.PENDING;
-    if (paid < total) return anyOverdue ? OwnerFairPaymentStatus.OVERDUE : OwnerFairPaymentStatus.PARTIALLY_PAID;
-    return OwnerFairPaymentStatus.PAID;
+  private toAuditJson(value: unknown): Prisma.InputJsonValue {
+    return value as Prisma.InputJsonValue
   }
 
   /**
-   * Valida paymentPlan do payload.
-   * Regras:
-   * - installmentsCount 1..12
-   * - installments.length === installmentsCount
-   * - number 1..N (sem repetição)
-   * - dueDate obrigatório
-   * - amountCents >= 0
-   * - soma(amountCents) == totalCents
-   * - paidAt (se vier) deve ser date-only válido
-   * - paidAmountCents (se vier) >= 0
+   * Esperado: YYYY-MM-DD (date-only)
+   * Armazenamos como Date em UTC 00:00:00 para padronizar.
    */
-  private validatePaymentPlanOrThrow(plan: any) {
-    if (!plan || typeof plan !== 'object') {
-      throw new BadRequestException('Informe paymentPlan.');
+  private parseDateOnlyOrThrow(value: string, fieldName: string): Date {
+    if (!value || typeof value !== 'string') {
+      throw new BadRequestException(`Informe ${fieldName}.`)
     }
 
-    const installmentsCount = Number(plan.installmentsCount);
-    const totalCents = Number(plan.totalCents);
+    const iso = `${value}T00:00:00.000Z`
+    const d = new Date(iso)
 
-    if (
-      !Number.isInteger(installmentsCount) ||
-      installmentsCount < 1 ||
-      installmentsCount > 12
-    ) {
+    if (Number.isNaN(d.getTime())) {
+      throw new BadRequestException(`${fieldName} inválido: "${value}".`)
+    }
+
+    return d
+  }
+
+  /**
+   * Status financeiro para uma compra (OwnerFairPurchase).
+   * - Se total == paid => PAID
+   * - Senão:
+   *   - Se há parcelas vencidas não pagas => OVERDUE
+   *   - Se algumas parcelas pagas => PARTIALLY_PAID
+   *   - Caso contrário => PENDING
+   */
+  private computePurchasePaymentStatus(input: {
+    totalCents: number
+    paidCents: number
+    installments: Array<{ dueDate: Date; paidAt: Date | null }>
+  }): OwnerFairPaymentStatus {
+    const remaining = Math.max(0, input.totalCents - input.paidCents)
+    if (remaining === 0) return OwnerFairPaymentStatus.PAID
+
+    const total = input.installments.length
+    if (total === 0) return OwnerFairPaymentStatus.PENDING
+
+    const now = new Date()
+    const paid = input.installments.filter((i) => !!i.paidAt).length
+    const anyOverdue = input.installments.some((i) => !i.paidAt && i.dueDate < now)
+
+    if (paid === 0) {
+      return anyOverdue ? OwnerFairPaymentStatus.OVERDUE : OwnerFairPaymentStatus.PENDING
+    }
+
+    if (paid < total) {
+      return anyOverdue ? OwnerFairPaymentStatus.OVERDUE : OwnerFairPaymentStatus.PARTIALLY_PAID
+    }
+
+    return OwnerFairPaymentStatus.PAID
+  }
+
+  /**
+   * Valida uma compra linha 1 por 1.
+   *
+   * Regras (Admin):
+   * - qty é forçado como 1 (não vem do DTO).
+   * - totalCents = unitPriceCents
+   * - paidCents: 0..totalCents
+   * - remaining = totalCents - paidCents
+   * - installmentsCount: 0..12
+   *   - Se remaining == 0 => installmentsCount deve ser 0 e installments vazio
+   *   - Se remaining > 0  => installmentsCount > 0 e installments obrigatório com soma == remaining
+   */
+  private validatePurchaseLineOrThrow(input: {
+    unitPriceCents: number
+    paidCents?: number
+    installmentsCount?: number
+    installments?: Array<{
+      number: number
+      dueDate: string
+      amountCents: number
+      paidAt?: string | null
+      paidAmountCents?: number | null
+    }>
+  }) {
+    const qty = 1
+    const unitPriceCents = Number(input.unitPriceCents)
+    const paidCents = Number(input.paidCents ?? 0)
+    const installmentsCount = Number(input.installmentsCount ?? 0)
+
+    if (!Number.isInteger(unitPriceCents) || unitPriceCents < 0) {
+      throw new BadRequestException('unitPriceCents deve ser inteiro >= 0.')
+    }
+
+    const totalCents = qty * unitPriceCents
+
+    if (!Number.isInteger(paidCents) || paidCents < 0) {
+      throw new BadRequestException('paidCents deve ser inteiro >= 0.')
+    }
+    if (paidCents > totalCents) {
+      throw new BadRequestException('paidCents não pode ser maior que o valor da barraca.')
+    }
+
+    if (!Number.isInteger(installmentsCount) || installmentsCount < 0 || installmentsCount > 12) {
+      throw new BadRequestException('installmentsCount deve ser inteiro entre 0 e 12.')
+    }
+
+    const remaining = totalCents - paidCents
+
+    // ✅ Sem restante => não pode parcelar
+    if (remaining === 0) {
+      if (installmentsCount !== 0) {
+        throw new BadRequestException('Sem restante: installmentsCount deve ser 0.')
+      }
+      if (input.installments && input.installments.length > 0) {
+        throw new BadRequestException('Sem restante: installments deve estar vazio.')
+      }
+
+      return {
+        qty,
+        unitPriceCents,
+        totalCents,
+        paidCents,
+        installmentsCount: 0,
+        installmentsParsed: [] as Array<{
+          number: number
+          dueDate: Date
+          amountCents: number
+          paidAt: Date | null
+          paidAmountCents: number | null
+        }>,
+        status: OwnerFairPaymentStatus.PAID,
+      }
+    }
+
+    // ✅ Tem restante => precisa parcelar
+    if (installmentsCount === 0) {
       throw new BadRequestException(
-        'installmentsCount deve ser inteiro entre 1 e 12.',
-      );
+        'Existe valor restante: informe installmentsCount > 0 e a lista de parcelas.',
+      )
     }
 
-    if (!Number.isInteger(totalCents) || totalCents < 0) {
-      throw new BadRequestException('totalCents deve ser inteiro >= 0.');
+    if (!Array.isArray(input.installments) || input.installments.length !== installmentsCount) {
+      throw new BadRequestException('A lista de parcelas não confere com installmentsCount.')
     }
 
-    if (!Array.isArray(plan.installments) || plan.installments.length !== installmentsCount) {
-      throw new BadRequestException(
-        'A lista de parcelas não confere com installmentsCount.',
-      );
-    }
+    const seen = new Set<number>()
+    let sum = 0
 
-    const seen = new Set<number>();
-    let sum = 0;
-
-    for (const ins of plan.installments) {
-      const number = Number(ins.number);
+    const installmentsParsed = input.installments.map((ins) => {
+      const number = Number(ins.number)
       if (!Number.isInteger(number) || number < 1 || number > installmentsCount) {
-        throw new BadRequestException('Cada parcela deve ter number válido (1..N).');
+        throw new BadRequestException('Cada parcela deve ter number válido (1..N).')
       }
       if (seen.has(number)) {
-        throw new BadRequestException('Não é permitido repetir number de parcela.');
+        throw new BadRequestException('Não é permitido repetir number de parcela.')
       }
-      seen.add(number);
+      seen.add(number)
 
-      if (!ins.dueDate || typeof ins.dueDate !== 'string') {
-        throw new BadRequestException('Informe a data de vencimento de todas as parcelas.');
-      }
-      // valida formato
-      this.parseDateOnlyOrThrow(ins.dueDate, 'dueDate');
+      const dueDate = this.parseDateOnlyOrThrow(ins.dueDate, 'dueDate')
 
-      const amountCents = Number(ins.amountCents);
+      const amountCents = Number(ins.amountCents)
       if (!Number.isInteger(amountCents) || amountCents < 0) {
-        throw new BadRequestException('amountCents deve ser inteiro >= 0.');
+        throw new BadRequestException('amountCents deve ser inteiro >= 0.')
       }
-      sum += amountCents;
+      sum += amountCents
 
-      if (ins.paidAt != null) {
-        if (typeof ins.paidAt !== 'string') {
-          throw new BadRequestException('paidAt inválido.');
-        }
-        this.parseDateOnlyOrThrow(ins.paidAt, 'paidAt');
+      const paidAt = ins.paidAt ? this.parseDateOnlyOrThrow(ins.paidAt, 'paidAt') : null
 
-        if (ins.paidAmountCents != null) {
-          const paidAmountCents = Number(ins.paidAmountCents);
-          if (!Number.isInteger(paidAmountCents) || paidAmountCents < 0) {
-            throw new BadRequestException('paidAmountCents deve ser inteiro >= 0.');
-          }
+      let paidAmountCents: number | null = null
+      if (ins.paidAmountCents != null) {
+        const v = Number(ins.paidAmountCents)
+        if (!Number.isInteger(v) || v < 0) {
+          throw new BadRequestException('paidAmountCents deve ser inteiro >= 0.')
         }
+        paidAmountCents = v
       }
+
+      return { number, dueDate, amountCents, paidAt, paidAmountCents }
+    })
+
+    if (sum !== remaining) {
+      throw new BadRequestException(
+        `A soma das parcelas (${sum}) deve ser igual ao restante (${remaining}).`,
+      )
     }
 
-    if (sum !== totalCents) {
-      throw new BadRequestException('A soma das parcelas deve ser igual ao total.');
+    const status = this.computePurchasePaymentStatus({
+      totalCents,
+      paidCents,
+      installments: installmentsParsed.map((i) => ({ dueDate: i.dueDate, paidAt: i.paidAt })),
+    })
+
+    return {
+      qty,
+      unitPriceCents,
+      totalCents,
+      paidCents,
+      installmentsCount,
+      installmentsParsed,
+      status,
     }
-
-    return { installmentsCount, totalCents };
-  }
-
-  private toAuditJson(value: unknown): Prisma.InputJsonValue {
-    // Prisma Json aceita null, boolean, number, string, arrays e objetos.
-    // Aqui garantimos compatibilidade de tipo para TS.
-    return value as Prisma.InputJsonValue;
   }
 
   // ---------------------------------------------
-  // Queries
+  // List
   // ---------------------------------------------
   async listByOwner(ownerId: string) {
-    const owner = await this.prisma.owner.findUnique({ where: { id: ownerId } });
-    if (!owner) throw new NotFoundException('Interessado não encontrado.');
+    const owner = await this.prisma.owner.findUnique({ where: { id: ownerId } })
+    if (!owner) throw new NotFoundException('Interessado não encontrado.')
 
     const links = await this.prisma.ownerFair.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
       include: {
         fair: { select: { id: true, name: true } },
-        stallSlots: { orderBy: { stallSize: 'asc' } },
-        paymentPlan: {
-          include: { installments: { orderBy: { number: 'asc' } } },
+
+        // ✅ compras feitas no admin (linhas 1 por 1)
+        ownerFairPurchases: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            installments: { orderBy: { number: 'asc' } },
+          },
+        },
+
+        // ✅ barracas já vinculadas (portal), consumindo compras
+        stallFairs: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            stall: {
+              select: { id: true, pdvName: true, stallSize: true, stallType: true },
+            },
+            purchase: {
+              select: { id: true, stallSize: true, unitPriceCents: true, qty: true, usedQty: true },
+            },
+          },
         },
       },
-    });
+    } as const)
 
     return {
       ownerId,
       items: links.map((l) => ({
+        ownerFairId: l.id,
         fairId: l.fairId,
         fairName: l.fair.name,
         stallsQty: l.stallsQty,
-        stallSlots: l.stallSlots.map((s) => ({
-          stallSize: s.stallSize,
-          qty: s.qty,
-          unitPriceCents: s.unitPriceCents,
-        })),
-        paymentPlan: l.paymentPlan
-          ? {
-              installmentsCount: l.paymentPlan.installmentsCount,
-              totalCents: l.paymentPlan.totalCents,
-              status: l.paymentPlan.status,
-              installments: l.paymentPlan.installments.map((i) => ({
-                number: i.number,
-                dueDate: i.dueDate.toISOString().slice(0, 10),
-                amountCents: i.amountCents,
-                paidAt: i.paidAt ? i.paidAt.toISOString().slice(0, 10) : null,
-                paidAmountCents: i.paidAmountCents ?? null,
-              })),
-            }
-          : null,
+        status: l.status,
         createdAt: l.createdAt.toISOString(),
         updatedAt: l.updatedAt.toISOString(),
+
+        purchases: l.ownerFairPurchases.map((p) => ({
+          id: p.id,
+          stallSize: p.stallSize,
+          qty: p.qty,
+          usedQty: p.usedQty,
+          unitPriceCents: p.unitPriceCents,
+          totalCents: p.totalCents,
+          paidCents: p.paidCents,
+          paidAt: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
+          installmentsCount: p.installmentsCount,
+          status: p.status,
+          installments: p.installments.map((i) => ({
+            number: i.number,
+            dueDate: i.dueDate.toISOString().slice(0, 10),
+            amountCents: i.amountCents,
+            paidAt: i.paidAt ? i.paidAt.toISOString().slice(0, 10) : null,
+            paidAmountCents: i.paidAmountCents ?? null,
+          })),
+        })),
+
+        stalls: l.stallFairs.map((sf) => ({
+          stallFairId: sf.id,
+          stallId: sf.stallId,
+          stallName: sf.stall.pdvName,
+          stallSize: sf.stall.stallSize,
+          stallType: sf.stall.stallType,
+          purchaseId: sf.purchaseId,
+          purchase: {
+            id: sf.purchase.id,
+            stallSize: sf.purchase.stallSize,
+            unitPriceCents: sf.purchase.unitPriceCents,
+            qty: sf.purchase.qty,
+            usedQty: sf.purchase.usedQty,
+          },
+          createdAt: sf.createdAt.toISOString(),
+        })),
       })),
-    };
+    }
   }
 
   // ---------------------------------------------
-  // Create Link
+  // Create: vínculo + compras (transação)
   // ---------------------------------------------
   async link(ownerId: string, dto: LinkInterestToFairDto, actor: JwtPayload) {
     const [owner, fair] = await Promise.all([
       this.prisma.owner.findUnique({ where: { id: ownerId } }),
       this.prisma.fair.findUnique({ where: { id: dto.fairId } }),
-    ]);
+    ])
 
-    if (!owner) throw new NotFoundException('Interessado não encontrado.');
-    if (!fair) throw new NotFoundException('Feira não encontrada.');
+    if (!owner) throw new NotFoundException('Interessado não encontrado.')
+    if (!fair) throw new NotFoundException('Feira não encontrada.')
 
+    // ✅ não permite duplicar vínculo
     const existing = await this.prisma.ownerFair.findUnique({
       where: { ownerId_fairId: { ownerId, fairId: dto.fairId } },
-      include: { stallSlots: true, paymentPlan: true },
-    });
+      select: { id: true },
+    })
     if (existing) {
-      throw new ConflictException('Este interessado já está vinculado a esta feira.');
+      throw new ConflictException('Este interessado já está vinculado a esta feira.')
     }
 
-    const stallsQty = this.validateAndSumSlots(dto.stallSlots);
+    // ✅ valida capacidade (se stallsCapacity > 0)
+    const purchasesCount = dto.purchases.length
+    if (fair.stallsCapacity > 0) {
+      const reservedAgg = await this.prisma.ownerFair.aggregate({
+        where: { fairId: dto.fairId },
+        _sum: { stallsQty: true },
+      })
+      const reserved = reservedAgg._sum.stallsQty ?? 0
+      const wouldReserve = reserved + purchasesCount
 
-    await this.assertFairCapacity({
-      fairId: dto.fairId,
-      stallsQtyToReserve: stallsQty,
-    });
-
-    this.validatePaymentPlanOrThrow(dto.paymentPlan);
-
-    const slotsTotalCents = this.sumSlotsTotalCents(dto.stallSlots);
-
-    // Se você quiser permitir negociação, remova esse bloqueio.
-    if (dto.paymentPlan.totalCents !== slotsTotalCents) {
-      throw new BadRequestException(
-        `totalCents do pagamento (${dto.paymentPlan.totalCents}) deve ser igual ao total da compra (${slotsTotalCents}).`,
-      );
+      if (wouldReserve > fair.stallsCapacity) {
+        throw new BadRequestException(
+          `Capacidade excedida: reservado=${wouldReserve}, capacidade=${fair.stallsCapacity}.`,
+        )
+      }
     }
 
+    // ✅ pré-valida todas as compras (para falhar antes de começar a transação)
+    const validated = dto.purchases.map((p) => {
+      const v = this.validatePurchaseLineOrThrow({
+        unitPriceCents: p.unitPriceCents,
+        paidCents: p.paidCents,
+        installmentsCount: p.installmentsCount,
+        installments: p.installments,
+      })
+
+      return {
+        stallSize: p.stallSize,
+        ...v,
+      }
+    })
+
+    // ✅ transação: cria OwnerFair + cria purchases + cria installments + auditoria
     const created = await this.prisma.$transaction(async (tx) => {
       const ownerFair = await tx.ownerFair.create({
         data: {
           ownerId,
           fairId: dto.fairId,
-          stallsQty,
-          stallSlots: {
-            create: dto.stallSlots.map((s) => ({
-              stallSize: s.stallSize,
-              qty: s.qty,
-              unitPriceCents: s.unitPriceCents,
-            })),
-          },
-          paymentPlan: {
-            create: {
-              totalCents: dto.paymentPlan.totalCents,
-              installmentsCount: dto.paymentPlan.installmentsCount,
-              status: OwnerFairPaymentStatus.PENDING, // recalculado abaixo
-              installments: {
-                create: dto.paymentPlan.installments.map((i) => ({
-                  number: i.number,
-                  dueDate: this.parseDateOnlyOrThrow(i.dueDate, 'dueDate'),
-                  amountCents: i.amountCents,
-                  paidAt: i.paidAt
-                    ? this.parseDateOnlyOrThrow(i.paidAt, 'paidAt')
-                    : null,
-                  paidAmountCents: i.paidAmountCents ?? null,
-                })),
-              },
-            },
-          },
+          stallsQty: purchasesCount, // fonte de verdade do admin: quantidade comprada
         },
+      })
+
+      // Auditoria do vínculo
+      await tx.auditLog.create({
+        data: {
+          action: AuditAction.CREATE,
+          entity: AuditEntity.OWNER_FAIR,
+          entityId: ownerFair.id,
+          actorUserId: actor.id,
+          before: this.toAuditJson({}),
+          after: this.toAuditJson({
+            ownerId,
+            fairId: dto.fairId,
+            stallsQty: purchasesCount,
+          }),
+        },
+      })
+
+      // Cria cada compra como uma linha independente
+      for (const p of validated) {
+        const purchase = await tx.ownerFairPurchase.create({
+          data: {
+            ownerFairId: ownerFair.id,
+            stallSize: p.stallSize,
+            qty: p.qty, // sempre 1
+            unitPriceCents: p.unitPriceCents,
+            totalCents: p.totalCents,
+            paidCents: p.paidCents,
+            installmentsCount: p.installmentsCount,
+            status: p.status,
+            paidAt: p.status === OwnerFairPaymentStatus.PAID ? new Date() : null,
+            usedQty: 0,
+          },
+        })
+
+        // cria parcelas (se houver)
+        if (p.installmentsCount > 0) {
+          await tx.ownerFairPurchaseInstallment.createMany({
+            data: p.installmentsParsed.map((ins) => ({
+              purchaseId: purchase.id,
+              number: ins.number,
+              dueDate: ins.dueDate,
+              amountCents: ins.amountCents,
+              paidAt: ins.paidAt,
+              paidAmountCents: ins.paidAmountCents,
+            })),
+          })
+        }
+
+        // Auditoria da compra (linha)
+        await tx.auditLog.create({
+          data: {
+            action: AuditAction.CREATE,
+            entity: AuditEntity.OWNER_FAIR_PURCHASE,
+            entityId: purchase.id,
+            actorUserId: actor.id,
+            before: this.toAuditJson({}),
+            after: this.toAuditJson({
+              ownerFairId: ownerFair.id,
+              stallSize: p.stallSize,
+              qty: p.qty,
+              unitPriceCents: p.unitPriceCents,
+              totalCents: p.totalCents,
+              paidCents: p.paidCents,
+              installmentsCount: p.installmentsCount,
+              status: p.status,
+            }),
+            meta: this.toAuditJson({
+              ownerId,
+              fairId: dto.fairId,
+            }),
+          },
+        })
+      }
+
+      // Retorna o vínculo já completo (para o front renderizar imediatamente)
+      const full = await tx.ownerFair.findUnique({
+        where: { id: ownerFair.id },
         include: {
-          stallSlots: true,
-          paymentPlan: { include: { installments: true } },
+          fair: { select: { id: true, name: true, stallsCapacity: true } },
+          ownerFairPurchases: {
+            orderBy: { createdAt: 'asc' },
+            include: { installments: { orderBy: { number: 'asc' } } },
+          },
         },
-      });
+      })
 
-      // Recalcula status
-      if (ownerFair.paymentPlan) {
-        const status = this.computePaymentStatus({
-          installments: ownerFair.paymentPlan.installments.map((i) => ({
-            dueDate: i.dueDate,
-            paidAt: i.paidAt,
-          })),
-        });
+      return full
+    })
 
-        await tx.ownerFairPaymentPlan.update({
-          where: { ownerFairId: ownerFair.id },
-          data: { status },
-        });
-      }
-
-      return ownerFair;
-    });
-
-    await this.prisma.auditLog.create({
-      data: {
-        action: AuditAction.CREATE,
-        entity: AuditEntity.OWNER_FAIR,
-        entityId: created.id,
-        actorUserId: actor.id,
-        before: this.toAuditJson({}),
-        after: this.toAuditJson({
-          ownerId: created.ownerId,
-          fairId: created.fairId,
-          stallsQty: created.stallsQty,
-          stallSlots: created.stallSlots.map((s) => ({
-            stallSize: s.stallSize,
-            qty: s.qty,
-            unitPriceCents: s.unitPriceCents,
-          })),
-          paymentPlan: created.paymentPlan
-            ? {
-                totalCents: created.paymentPlan.totalCents,
-                installmentsCount: created.paymentPlan.installmentsCount,
-                status: created.paymentPlan.status,
-                installments: created.paymentPlan.installments.map((i) => ({
-                  number: i.number,
-                  dueDate: i.dueDate.toISOString().slice(0, 10),
-                  amountCents: i.amountCents,
-                  paidAt: i.paidAt ? i.paidAt.toISOString().slice(0, 10) : null,
-                  paidAmountCents: i.paidAmountCents ?? null,
-                })),
-              }
-            : null,
-        }),
-      },
-    });
-
-    return created;
+    return created
   }
 
   // ---------------------------------------------
-  // Update Link
-  // ---------------------------------------------
-  async update(ownerId: string, fairId: string, dto: UpdateOwnerFairDto, actor: JwtPayload) {
-    const existing = await this.prisma.ownerFair.findUnique({
-      where: { ownerId_fairId: { ownerId, fairId } },
-      include: {
-        stallSlots: true,
-        paymentPlan: { include: { installments: true } },
-      },
-    });
-
-    if (!existing) throw new NotFoundException('Vínculo não encontrado.');
-
-    if (!dto.stallSlots || dto.stallSlots.length === 0) {
-      throw new BadRequestException('Informe stallSlots para atualizar a compra.');
-    }
-    if (!dto.paymentPlan) {
-      throw new BadRequestException('Informe paymentPlan para atualizar o pagamento.');
-    }
-
-    const stallsQty = this.validateAndSumSlots(dto.stallSlots);
-
-    await this.assertFairCapacity({
-      fairId,
-      stallsQtyToReserve: stallsQty,
-      excludeOwnerFairId: existing.id,
-    });
-
-    this.validatePaymentPlanOrThrow(dto.paymentPlan);
-
-    const slotsTotalCents = this.sumSlotsTotalCents(dto.stallSlots);
-    if (dto.paymentPlan.totalCents !== slotsTotalCents) {
-      throw new BadRequestException(
-        `totalCents do pagamento (${dto.paymentPlan.totalCents}) deve ser igual ao total da compra (${slotsTotalCents}).`,
-      );
-    }
-
-    const beforeObj = {
-      ownerId: existing.ownerId,
-      fairId: existing.fairId,
-      stallsQty: existing.stallsQty,
-      stallSlots: existing.stallSlots.map((s) => ({
-        stallSize: s.stallSize,
-        qty: s.qty,
-        unitPriceCents: s.unitPriceCents,
-      })),
-      paymentPlan: existing.paymentPlan
-        ? {
-            totalCents: existing.paymentPlan.totalCents,
-            installmentsCount: existing.paymentPlan.installmentsCount,
-            status: existing.paymentPlan.status,
-            installments: existing.paymentPlan.installments.map((i) => ({
-              number: i.number,
-              dueDate: i.dueDate.toISOString().slice(0, 10),
-              amountCents: i.amountCents,
-              paidAt: i.paidAt ? i.paidAt.toISOString().slice(0, 10) : null,
-              paidAmountCents: i.paidAmountCents ?? null,
-            })),
-          }
-        : null,
-    };
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      // 1) atualiza stallsQty
-      const ownerFair = await tx.ownerFair.update({
-        where: { ownerId_fairId: { ownerId, fairId } },
-        data: { stallsQty },
-      });
-
-      // 2) substitui slots
-      await tx.ownerFairStallSlot.deleteMany({
-        where: { ownerFairId: existing.id },
-      });
-
-      await tx.ownerFairStallSlot.createMany({
-        data: dto.stallSlots!.map((s) => ({
-          ownerFairId: existing.id,
-          stallSize: s.stallSize,
-          qty: s.qty,
-          unitPriceCents: s.unitPriceCents,
-        })),
-      });
-
-      // 3) substitui paymentPlan + installments
-      const plan = await tx.ownerFairPaymentPlan.findUnique({
-        where: { ownerFairId: existing.id },
-        select: { id: true },
-      });
-
-      const installmentsParsed = dto.paymentPlan.installments.map((i) => ({
-        number: i.number,
-        dueDate: this.parseDateOnlyOrThrow(i.dueDate, 'dueDate'),
-        amountCents: i.amountCents,
-        paidAt: i.paidAt ? this.parseDateOnlyOrThrow(i.paidAt, 'paidAt') : null,
-        paidAmountCents: i.paidAmountCents ?? null,
-      }));
-
-      const status = this.computePaymentStatus({
-        installments: installmentsParsed.map((x) => ({
-          dueDate: x.dueDate,
-          paidAt: x.paidAt,
-        })),
-      });
-
-      if (plan) {
-        await tx.ownerFairPaymentPlan.update({
-          where: { ownerFairId: existing.id },
-          data: {
-            totalCents: dto.paymentPlan.totalCents,
-            installmentsCount: dto.paymentPlan.installmentsCount,
-            status,
-          },
-        });
-
-        await tx.ownerFairInstallment.deleteMany({ where: { planId: plan.id } });
-
-        await tx.ownerFairInstallment.createMany({
-          data: installmentsParsed.map((i) => ({
-            planId: plan.id,
-            number: i.number,
-            dueDate: i.dueDate,
-            amountCents: i.amountCents,
-            paidAt: i.paidAt,
-            paidAmountCents: i.paidAmountCents,
-          })),
-        });
-      } else {
-        await tx.ownerFairPaymentPlan.create({
-          data: {
-            ownerFairId: existing.id,
-            totalCents: dto.paymentPlan.totalCents,
-            installmentsCount: dto.paymentPlan.installmentsCount,
-            status,
-            installments: { create: installmentsParsed },
-          },
-        });
-      }
-
-      return ownerFair;
-    });
-
-    await this.prisma.auditLog.create({
-      data: {
-        action: AuditAction.UPDATE,
-        entity: AuditEntity.OWNER_FAIR,
-        entityId: existing.id,
-        actorUserId: actor.id,
-        before: this.toAuditJson(beforeObj),
-        after: this.toAuditJson({
-          ownerId,
-          fairId,
-          stallsQty,
-          stallSlots: dto.stallSlots.map((s) => ({
-            stallSize: s.stallSize,
-            qty: s.qty,
-            unitPriceCents: s.unitPriceCents,
-          })),
-          paymentPlan: dto.paymentPlan,
-        }),
-      },
-    });
-
-    return updated;
-  }
-
-  // ---------------------------------------------
-  // Remove Link
+  // Remove vínculo (bloqueia se já houver barracas vinculadas)
   // ---------------------------------------------
   async remove(ownerId: string, fairId: string, actor: JwtPayload) {
     const existing = await this.prisma.ownerFair.findUnique({
       where: { ownerId_fairId: { ownerId, fairId } },
-      include: {
-        stallSlots: true,
-        paymentPlan: { include: { installments: true } },
-      },
-    });
+      select: { id: true, stallsQty: true, _count: { select: { stallFairs: true } } },
+    })
 
-    if (!existing) throw new NotFoundException('Vínculo não encontrado.');
+    if (!existing) throw new NotFoundException('Vínculo não encontrado.')
 
-    const beforeObj = {
-      ownerId: existing.ownerId,
-      fairId: existing.fairId,
-      stallsQty: existing.stallsQty,
-      stallSlots: existing.stallSlots.map((s) => ({
-        stallSize: s.stallSize,
-        qty: s.qty,
-        unitPriceCents: s.unitPriceCents,
-      })),
-      paymentPlan: existing.paymentPlan
-        ? {
-            totalCents: existing.paymentPlan.totalCents,
-            installmentsCount: existing.paymentPlan.installmentsCount,
-            status: existing.paymentPlan.status,
-            installments: existing.paymentPlan.installments.map((i) => ({
-              number: i.number,
-              dueDate: i.dueDate.toISOString().slice(0, 10),
-              amountCents: i.amountCents,
-              paidAt: i.paidAt ? i.paidAt.toISOString().slice(0, 10) : null,
-              paidAmountCents: i.paidAmountCents ?? null,
-            })),
-          }
-        : null,
-    };
+    // ✅ Proteção: não deixar remover se já existe StallFair (já “consumiu” compra)
+    if (existing._count.stallFairs > 0) {
+      throw new BadRequestException(
+        'Não é possível remover o vínculo: existem barracas já vinculadas nesta feira.',
+      )
+    }
 
     await this.prisma.ownerFair.delete({
       where: { ownerId_fairId: { ownerId, fairId } },
-    });
+    })
 
     await this.prisma.auditLog.create({
       data: {
@@ -658,11 +506,278 @@ export class InterestFairsService {
         entity: AuditEntity.OWNER_FAIR,
         entityId: existing.id,
         actorUserId: actor.id,
-        before: this.toAuditJson(beforeObj),
+        before: this.toAuditJson({
+          ownerFairId: existing.id,
+          stallsQty: existing.stallsQty,
+        }),
         after: this.toAuditJson({}),
       },
-    });
+    })
 
-    return { ok: true };
+    return { ok: true }
+  }
+
+  /**
+ * ✅ PATCH purchases (replace total)
+ *
+ * Responsabilidade:
+ * - Validar vínculo Owner↔Fair
+ * - Bloquear se já houve consumo (usedQty > 0 OU existe StallFair)
+ * - Apagar todas as compras antigas (cascade nas parcelas)
+ * - Recriar compras e parcelas (1 por 1)
+ * - Recalcular OwnerFair.stallsQty
+ * - Registrar auditoria OWNER_FAIR_PURCHASE
+ */
+
+  async patchPurchasesReplaceTotal(
+    ownerId: string,
+    fairId: string,
+    dto: PatchOwnerFairPurchasesDto,
+    actor: JwtPayload,
+  ) {
+    // 1) valida vínculo
+    const ownerFair = await this.prisma.ownerFair.findUnique({
+      where: { ownerId_fairId: { ownerId, fairId } },
+      include: {
+        ownerFairPurchases: {
+          include: { installments: true },
+          orderBy: { createdAt: 'asc' },
+        },
+        stallFairs: { select: { id: true } },
+      },
+    })
+
+    if (!ownerFair) throw new NotFoundException('Vínculo não encontrado.')
+
+    // 2) bloqueio por consumo
+    const anyConsumed = ownerFair.ownerFairPurchases.some((p) => (p.usedQty ?? 0) > 0)
+    const hasStallFairs = (ownerFair.stallFairs?.length ?? 0) > 0
+
+    if (anyConsumed || hasStallFairs) {
+      throw new ConflictException(
+        'Não é possível editar compras após vincular barracas à feira (consumo detectado).',
+      )
+    }
+
+    // 3) snapshot "before" para auditoria
+    const beforeSnapshot = {
+      ownerFairId: ownerFair.id,
+      stallsQty: ownerFair.stallsQty,
+      purchases: ownerFair.ownerFairPurchases.map((p) => ({
+        id: p.id,
+        stallSize: p.stallSize,
+        qty: p.qty,
+        unitPriceCents: p.unitPriceCents,
+        totalCents: p.totalCents,
+        paidCents: p.paidCents,
+        installmentsCount: p.installmentsCount,
+        status: p.status,
+        usedQty: p.usedQty,
+        installments: p.installments.map((i) => ({
+          number: i.number,
+          dueDate: i.dueDate.toISOString().slice(0, 10),
+          amountCents: i.amountCents,
+          paidAt: i.paidAt ? i.paidAt.toISOString().slice(0, 10) : null,
+          paidAmountCents: i.paidAmountCents ?? null,
+        })),
+      })),
+    }
+
+    // 4) validações de negócio (por linha)
+    // Decisão: 1 por 1 => qty = 1 sempre.
+    const normalized = dto.purchases.map((line, idx) => {
+      const unitPriceCents = Number(line.unitPriceCents ?? 0)
+      const paidCents = Number(line.paidCents ?? 0)
+      const count = Number(line.installmentsCount ?? 0)
+
+      if (!Number.isInteger(unitPriceCents) || unitPriceCents < 0) {
+        throw new BadRequestException(`Linha ${idx + 1}: unitPriceCents inválido.`)
+      }
+      if (!Number.isInteger(paidCents) || paidCents < 0) {
+        throw new BadRequestException(`Linha ${idx + 1}: paidCents inválido.`)
+      }
+      if (paidCents > unitPriceCents) {
+        throw new BadRequestException(`Linha ${idx + 1}: paidCents não pode ser maior que unitPriceCents.`)
+      }
+      if (!Number.isInteger(count) || count < 0 || count > 12) {
+        throw new BadRequestException(`Linha ${idx + 1}: installmentsCount deve ser entre 0 e 12.`)
+      }
+
+      const totalCents = unitPriceCents // qty=1
+      const remaining = totalCents - paidCents
+
+      // Se quitou => não pode ter parcelas
+      if (remaining === 0) {
+        if (count !== 0) {
+          throw new BadRequestException(`Linha ${idx + 1}: sem restante => installmentsCount deve ser 0.`)
+        }
+        if (line.installments?.length) {
+          throw new BadRequestException(`Linha ${idx + 1}: sem restante => installments deve estar vazio.`)
+        }
+        return {
+          stallSize: line.stallSize,
+          unitPriceCents,
+          totalCents,
+          paidCents,
+          installmentsCount: 0,
+          installments: [],
+          status: OwnerFairPaymentStatus.PAID,
+        }
+      }
+
+      // Se falta pagar => precisa parcelamento (por enquanto)
+      if (count === 0) {
+        throw new BadRequestException(
+          `Linha ${idx + 1}: existe restante (${remaining}) => informe installmentsCount > 0 e a lista de parcelas.`,
+        )
+      }
+
+      if (!Array.isArray(line.installments) || line.installments.length !== count) {
+        throw new BadRequestException(`Linha ${idx + 1}: installments não confere com installmentsCount.`)
+      }
+
+      // valida soma parcelas == restante e numbers únicos 1..N
+      const seen = new Set<number>()
+      let sum = 0
+
+      const installmentsParsed = line.installments.map((ins) => {
+        const number = Number(ins.number)
+        if (!Number.isInteger(number) || number < 1 || number > count) {
+          throw new BadRequestException(`Linha ${idx + 1}: parcela number inválido (1..${count}).`)
+        }
+        if (seen.has(number)) {
+          throw new BadRequestException(`Linha ${idx + 1}: parcela number repetido (${number}).`)
+        }
+        seen.add(number)
+
+        const dueDate = this.parseDateOnlyOrThrow(ins.dueDate, `Linha ${idx + 1}: dueDate`)
+        const amountCents = Number(ins.amountCents)
+
+        if (!Number.isInteger(amountCents) || amountCents < 0) {
+          throw new BadRequestException(`Linha ${idx + 1}: amountCents inválido.`)
+        }
+
+        sum += amountCents
+
+        return { number, dueDate, amountCents }
+      })
+
+      if (sum !== remaining) {
+        throw new BadRequestException(
+          `Linha ${idx + 1}: soma das parcelas (${sum}) deve ser igual ao restante (${remaining}).`,
+        )
+      }
+
+      // status inicial (sem paidAt em parcelas no admin, mas já deixa coerente)
+      const status = this.computePurchasePaymentStatus({
+        totalCents,
+        paidCents,
+        installments: installmentsParsed.map((i) => ({
+          dueDate: i.dueDate,
+          paidAt: null,
+        })),
+      })
+
+      return {
+        stallSize: line.stallSize,
+        unitPriceCents,
+        totalCents,
+        paidCents,
+        installmentsCount: count,
+        installments: installmentsParsed,
+        status,
+      }
+    })
+
+    // 5) transação: delete tudo e recria
+    const result = await this.prisma.$transaction(async (tx) => {
+      // apaga compras antigas (cascade apaga installments)
+      await tx.ownerFairPurchase.deleteMany({
+        where: { ownerFairId: ownerFair.id },
+      })
+
+      // recria compras (1 por 1)
+      for (const p of normalized) {
+        await tx.ownerFairPurchase.create({
+          data: {
+            ownerFairId: ownerFair.id,
+            stallSize: p.stallSize as StallSize,
+            qty: 1, // ✅ 1 por 1
+            unitPriceCents: p.unitPriceCents,
+            totalCents: p.totalCents,
+            paidCents: p.paidCents,
+            installmentsCount: p.installmentsCount,
+            status: p.status,
+            usedQty: 0, // resetado (não havia consumo)
+            installments: {
+              create:
+                p.installmentsCount > 0
+                  ? p.installments.map((i) => ({
+                    number: i.number,
+                    dueDate: i.dueDate,
+                    amountCents: i.amountCents,
+                  }))
+                  : [],
+            },
+          },
+        })
+      }
+
+      // atualiza stallsQty (quantidade comprada = número de linhas)
+      const stallsQty = normalized.length
+
+      const updatedOwnerFair = await tx.ownerFair.update({
+        where: { id: ownerFair.id },
+        data: { stallsQty },
+        select: { id: true, stallsQty: true, ownerId: true, fairId: true },
+      })
+
+      return updatedOwnerFair
+    })
+
+    // 6) auditoria (before/after)
+    const afterSnapshot = {
+      ownerFairId: result.id,
+      stallsQty: result.stallsQty,
+      purchasesCount: normalized.length,
+      purchases: normalized.map((p) => ({
+        stallSize: p.stallSize,
+        qty: 1,
+        unitPriceCents: p.unitPriceCents,
+        totalCents: p.totalCents,
+        paidCents: p.paidCents,
+        installmentsCount: p.installmentsCount,
+        status: p.status,
+        usedQty: 0,
+        installments: p.installments.map((i) => ({
+          number: i.number,
+          dueDate: i.dueDate.toISOString().slice(0, 10),
+          amountCents: i.amountCents,
+        })),
+      })),
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        action: AuditAction.UPDATE,
+        entity: AuditEntity.OWNER_FAIR_PURCHASE,
+        // decisão: entityId = ownerFairId, pois o "replace" altera o conjunto inteiro de compras do vínculo
+        entityId: ownerFair.id,
+        actorUserId: actor.id,
+        before: this.toAuditJson(beforeSnapshot),
+        after: this.toAuditJson(afterSnapshot),
+        meta: this.toAuditJson({
+          ownerId,
+          fairId,
+          mode: 'replace_total',
+        }),
+      },
+    })
+
+    return {
+      ok: true,
+      ownerFairId: result.id,
+      stallsQty: result.stallsQty,
+    }
   }
 }

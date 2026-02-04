@@ -1,59 +1,42 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsNotEmpty, IsString, ValidateNested } from 'class-validator';
-import { OwnerFairStallSlotDto } from './owner-fair-stall-slot.dto';
-import { OwnerFairPaymentPlanDto } from './owner-fair-payment-plan.dto';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 /**
- * Item retornado na listagem de feiras vinculadas a um interessado.
- * Inclui compra por tamanho (stallSlots) e plano de pagamento (paymentPlan).
+ * Parcela do plano de pagamento de UMA barraca vinculada na feira (StallFair).
+ * - dueDate e paidAt são "date-only" no retorno (YYYY-MM-DD) para UI.
  */
-export class OwnerFairItemDto {
-  @ApiProperty({ description: 'ID da feira.', example: 'e2afa654-2b99-4364-92e6-cce6643cc067' })
-  @IsString()
-  @IsNotEmpty()
-  fairId!: string;
-
-  @ApiProperty({ description: 'Nome da feira.', example: 'Feira Gastronômica Centro' })
-  @IsString()
-  @IsNotEmpty()
-  fairName!: string;
-
-  @ApiProperty({
-    description: 'Quantidade total de barracas compradas (derivada da soma dos slots).',
-    example: 2,
-  })
+export class OwnerFairStallInstallmentDto {
+  @ApiProperty({ description: 'Número da parcela (1..N).', example: 1 })
   @IsInt()
-  stallsQty!: number;
+  @Min(1)
+  number!: number;
 
-  @ApiProperty({
-    description: 'Compra por tamanho (slots).',
-    type: () => [OwnerFairStallSlotDto],
-  })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => OwnerFairStallSlotDto)
-  stallSlots!: OwnerFairStallSlotDto[];
-
-  @ApiProperty({
-    description: 'Plano de pagamento do vínculo.',
-    type: () => OwnerFairPaymentPlanDto,
-  })
-  @ValidateNested()
-  @Type(() => OwnerFairPaymentPlanDto)
-  paymentPlan!: OwnerFairPaymentPlanDto;
-
-  @ApiProperty({
-    description: 'Data de criação (ISO string).',
-    example: '2026-01-30T00:00:00.000Z',
-  })
+  @ApiProperty({ description: 'Data de vencimento (YYYY-MM-DD).', example: '2026-02-10' })
   @IsString()
-  createdAt!: string;
+  @IsNotEmpty()
+  dueDate!: string;
 
-  @ApiProperty({
-    description: 'Data da última atualização (ISO string).',
-    example: '2026-01-30T00:00:00.000Z',
+  @ApiProperty({ description: 'Valor da parcela em centavos.', example: 25000 })
+  @IsInt()
+  @Min(0)
+  amountCents!: number;
+
+  @ApiPropertyOptional({
+    description: 'Data de pagamento (YYYY-MM-DD) ou null se não pago.',
+    example: '2026-02-10',
+    nullable: true,
   })
+  @IsOptional()
   @IsString()
-  updatedAt!: string;
+  paidAt!: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Valor efetivamente pago em centavos (ou null).',
+    example: 25000,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  paidAmountCents!: number | null;
 }

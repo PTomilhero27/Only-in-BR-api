@@ -1,46 +1,55 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsIn, IsOptional } from 'class-validator';
-import { DocumentTemplateStatus } from '@prisma/client';
+import { ApiPropertyOptional } from '@nestjs/swagger'
+import { Transform } from 'class-transformer'
+import { IsBoolean, IsEnum, IsOptional } from 'class-validator'
+import { DocumentTemplateStatus } from '@prisma/client'
 
 /**
- * DTO de listagem com filtros.
+ * ListDocumentTemplatesDto
  *
  * Responsabilidade:
- * - Controlar filtros e o "modo" de retorno.
+ * - Definir filtros de listagem para templates globais.
  *
  * Observação importante:
- * - mode=summary: NÃO retorna o campo content (mais leve para listagem em cards/tabelas).
- * - mode=full: retorna o template completo (incluindo content).
- *
- * Exemplo:
- * GET /document-templates?status=PUBLISHED&isAddendum=false&mode=summary
+ * - Query params chegam como string (ex.: "false").
+ * - Aqui transformamos para boolean para evitar erro de validação.
  */
 export class ListDocumentTemplatesDto {
   @ApiPropertyOptional({
-    description: 'Filtra pelo status editorial do template.',
+    description: 'Filtra por status do template.',
     enum: DocumentTemplateStatus,
     example: 'PUBLISHED',
   })
+  @IsOptional()
   @IsEnum(DocumentTemplateStatus)
-  @IsOptional()
-  status?: DocumentTemplateStatus;
-
-  @ApiPropertyOptional({
-    description: 'Filtra se é aditivo (true) ou contrato principal (false).',
-    example: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  isAddendum?: boolean;
+  status?: DocumentTemplateStatus
 
   @ApiPropertyOptional({
     description:
-      'Controla o nível de detalhe da resposta. summary não inclui "content" e inclui contagens para UI.',
-    example: 'summary',
-    enum: ['full', 'summary'],
-    default: 'full',
+      'Filtra por tipo: contrato principal (false) ou aditivo (true). ' +
+      'Query string aceita "true"/"false".',
+    example: false,
   })
-  @IsIn(['full', 'summary'])
   @IsOptional()
-  mode?: 'full' | 'summary';
+  @Transform(({ value }) => {
+    // ✅ aceita boolean real (caso venha via testes)
+    if (typeof value === 'boolean') return value
+
+    // ✅ aceita "true"/"false" (querystring padrão)
+    if (value === 'true') return true
+    if (value === 'false') return false
+
+    // fallback: deixa como veio para o class-validator apontar erro se for inválido
+    return value
+  })
+  @IsBoolean()
+  isAddendum?: boolean
+
+  @ApiPropertyOptional({
+    description: 'Modo de retorno: full (com content) ou summary (sem content + usage).',
+    enum: ['full', 'summary'],
+    example: 'summary',
+  })
+  @IsOptional()
+  @IsEnum(['full', 'summary'] as const)
+  mode?: 'full' | 'summary'
 }
