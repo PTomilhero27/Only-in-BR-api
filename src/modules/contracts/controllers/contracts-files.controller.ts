@@ -24,47 +24,9 @@ import { UploadContractPdfResponseDto } from '../dto/assinafy/upload-contract-pd
 export class ContractsFilesController {
   constructor(private readonly storage: ContractsStorageService) {}
 
-  @Post(':id/pdf')
-  @ApiParam({
-    name: 'id',
-    description: 'ID do contrato (Contract.id) que receberá o PDF',
-    example: '8b0b6d8f-8c7f-4c2a-9a5e-1b5d8c2fdc1a',
-  })
-  @ApiOperation({
-    summary:
-      'Upload do PDF do contrato (valida feira + owner + template) e salva pdfPath',
-    description:
-      'Recebe um PDF (multipart/form-data) + fairId/ownerId/templateId. ' +
-      'Valida vínculo do expositor na feira e se o template é o contrato principal da feira. ' +
-      'Sobe no Supabase Storage e salva Contract.pdfPath versionado (evita cache e PDFs antigos).',
-  })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        fairId: { type: 'string', format: 'uuid' },
-        ownerId: { type: 'string' },
-        templateId: { type: 'string', format: 'uuid' },
-        file: { type: 'string', format: 'binary' },
-      },
-      required: ['fairId', 'ownerId', 'templateId', 'file'],
-    },
-  })
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadPdf(
-    @Param('id') contractId: string,
-    @Body() body: UploadContractPdfDto,
-    @UploadedFile() file: Express.Multer.File,
-  ): Promise<UploadContractPdfResponseDto> {
-    /**
-     * Esta rota recebe um PDF e delega a validação + persistência para o service.
-     * Mantemos validações básicas no controller para dar feedback rápido ao client.
-     */
+  private validatePdfOrThrow(file?: Express.Multer.File) {
     if (!file) {
-      throw new BadRequestException(
-        'Arquivo não enviado. Campo esperado: file.',
-      );
+      throw new BadRequestException('Arquivo não enviado. Campo esperado: file.');
     }
 
     if (file.mimetype !== 'application/pdf') {
@@ -82,12 +44,54 @@ export class ContractsFilesController {
         );
       }
     }
+  }
+
+  @Post('templates/:templateId/pdf')
+  @ApiParam({
+    name: 'templateId',
+    description: 'ID do template principal do contrato (DocumentTemplate.id)',
+    example: '8b0b6d8f-8c7f-4c2a-9a5e-1b5d8c2fdc1a',
+  })
+  @ApiOperation({
+    summary:
+      'Upload do PDF do contrato (cria Contract se necessário) e salva pdfPath',
+    description:
+      'Recebe PDF (multipart/form-data) + fairId/ownerId e opcionalmente contractId. ' +
+      'O templateId vem na rota e é validado como contrato principal da feira. ' +
+      'Se contractId não for informado, o sistema cria/acha o Contract pelo OwnerFair (1:1) e continua o upload.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        fairId: { type: 'string', format: 'uuid' },
+        ownerId: { type: 'string' },
+        contractId: {
+          type: 'string',
+          format: 'uuid',
+          nullable: true,
+          description:
+            'Opcional. Se não informado, o sistema cria/acha o Contract do OwnerFair.',
+        },
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['fairId', 'ownerId', 'file'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadPdfByTemplate(
+    @Param('templateId') templateId: string,
+    @Body() body: UploadContractPdfDto,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<UploadContractPdfResponseDto> {
+    this.validatePdfOrThrow(file);
 
     return this.storage.uploadContractPdf({
-      contractId,
+      contractId: body.contractId, 
       fairId: body.fairId,
       ownerId: body.ownerId,
-      templateId: body.templateId,
+      templateId, 
       fileBuffer: file.buffer,
     });
   }
