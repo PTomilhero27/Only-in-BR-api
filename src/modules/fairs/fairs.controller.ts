@@ -25,6 +25,7 @@ import { SettleStallInstallmentsDto } from './dto/exhibitors/settle-stall-instal
 import { RescheduleInstallmentDto } from './dto/exhibitors/reschedule-installment.dto'
 import { CreateInstallmentPaymentDto } from './dto/exhibitors/create-installment-payment.dto'
 import { InstallmentPaymentActionResponseDto } from './dto/exhibitors/installment-payment-action-response.dto'
+import { UpdateOwnerFairObservationsDto } from './dto/exhibitors/update-ownerfair-observations.dto'
 
 /**
  * Controller de Feiras.
@@ -166,5 +167,29 @@ export class FairsController {
       dto,
       user.id,
     )
+  }
+
+
+    /**
+   * Atualiza as observações internas do admin para um expositor (Owner) dentro de uma feira.
+   * Observação: estamos ancorando pelo par (fairId, ownerId) para evitar o client precisar do ownerFairId.
+   */
+  @Patch(':fairId/exhibitors/:ownerId/observations')
+  @ApiOperation({
+    summary: 'Atualizar observações do expositor na feira',
+    description: 'Permite ao admin salvar observações no vínculo Owner ↔ Fair (OwnerFair).',
+  })
+  updateExhibitorObservations(
+    @Param('fairId') fairId: string,
+    @Param('ownerId') ownerId: string,
+    @Body() dto: UpdateOwnerFairObservationsDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.fairsService.updateExhibitorObservations({
+      fairId,
+      ownerId,
+      observations: dto.observations ?? null,
+      actorUserId: user.id,
+    });
   }
 }

@@ -27,7 +27,7 @@ export class FairsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-  ) {}
+  ) { }
 
   // ---------------------------------------------------------
   // Helpers (datas / normalização)
@@ -327,13 +327,13 @@ export class FairsService {
   private toFairResponse(fair: any) {
     const fairForms = Array.isArray(fair.fairForms)
       ? fair.fairForms.map((ff: any) => ({
-          slug: ff.form?.slug,
-          name: ff.form?.name,
-          active: ff.form?.active,
-          enabled: ff.enabled,
-          startsAt: ff.startsAt instanceof Date ? ff.startsAt.toISOString() : ff.startsAt,
-          endsAt: ff.endsAt instanceof Date ? ff.endsAt.toISOString() : ff.endsAt,
-        }))
+        slug: ff.form?.slug,
+        name: ff.form?.name,
+        active: ff.form?.active,
+        enabled: ff.enabled,
+        startsAt: ff.startsAt instanceof Date ? ff.startsAt.toISOString() : ff.startsAt,
+        endsAt: ff.endsAt instanceof Date ? ff.endsAt.toISOString() : ff.endsAt,
+      }))
       : undefined
 
     const ownerFairs = Array.isArray(fair.ownerFairs) ? fair.ownerFairs : []
@@ -520,304 +520,362 @@ export class FairsService {
    *   - Contract summary (template da feira + instância + sign url)
    * - Retornar métricas da feira (capacidade/reservas)
    */
-  async listExhibitorsWithStalls(fairId: string) {
-    const fair = await this.prisma.fair.findUnique({
-      where: { id: fairId },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        address: true,
-        stallsCapacity: true,
-        createdAt: true,
-        updatedAt: true,
-        occurrences: {
-          orderBy: { startsAt: 'asc' },
-          select: { id: true, startsAt: true, endsAt: true },
-        },
-        contractSettings: {
-          select: {
-            id: true,
-            templateId: true,
-            updatedAt: true,
-            updatedByUserId: true,
-            template: {
-              select: {
-                id: true,
-                title: true,
-                status: true,
-                isAddendum: true,
-                updatedAt: true,
-              },
+async listExhibitorsWithStalls(fairId: string) {
+  /**
+   * Lista expositores (OwnerFair) no contexto da feira com:
+   * - Owner (contato + endereço + pagamento)
+   * - compras (OwnerFairPurchase + installments)
+   * - barracas vinculadas (StallFair + purchase consumida)
+   * - contrato (instância + aditivo)
+   * - ✅ observações do admin (OwnerFair.observations)
+   *
+   * Decisão:
+   * - Usamos `select` no OwnerFair para garantir que `observations` seja retornado
+   *   e evitar "contratos implícitos" (campos mudarem sem perceber).
+   */
+
+  const fair = await this.prisma.fair.findUnique({
+    where: { id: fairId },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      address: true,
+      stallsCapacity: true,
+      createdAt: true,
+      updatedAt: true,
+      occurrences: {
+        orderBy: { startsAt: 'asc' },
+        select: { id: true, startsAt: true, endsAt: true },
+      },
+      contractSettings: {
+        select: {
+          id: true,
+          templateId: true,
+          updatedAt: true,
+          updatedByUserId: true,
+          template: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              isAddendum: true,
+              updatedAt: true,
             },
           },
         },
       },
-    })
+    },
+  })
 
-    if (!fair) throw new NotFoundException('Feira não encontrada.')
+  if (!fair) throw new NotFoundException('Feira não encontrada.')
 
-    const ownerFairs = await this.prisma.ownerFair.findMany({
-      where: { fairId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        // ✅✅✅ AQUI ESTÁ A MUDANÇA: Owner com endereço + pagamento
-        owner: {
-          select: {
-            id: true,
-            personType: true,
-            document: true,
-            fullName: true,
-            email: true,
-            phone: true,
+  const ownerFairs = await this.prisma.ownerFair.findMany({
+    where: { fairId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      fairId: true,
+      ownerId: true,
 
-            // Endereço (modal "Dados" > Endereço)
-            addressFull: true,
-            addressCity: true,
-            addressState: true,
-            addressZipcode: true,
-            addressNumber: true,
+      stallsQty: true,
+      status: true,
+      contractSignedAt: true,
 
-            // Pagamento (modal "Dados" > Pagamento)
-            pixKey: true,
-            bankName: true,
-            bankAgency: true,
-            bankAccount: true,
-            bankAccountType: true,
-            bankHolderDoc: true,
-            bankHolderName: true,
+      // ✅ Observações internas do admin no vínculo
+      observations: true,
 
-            // Extra (útil para ficha/contrato e futuras telas)
-            stallsDescription: true,
-          },
+      createdAt: true,
+      updatedAt: true,
+
+      // ✅ Owner com endereço + pagamento
+      owner: {
+        select: {
+          id: true,
+          personType: true,
+          document: true,
+          fullName: true,
+          email: true,
+          phone: true,
+
+          // Endereço (modal "Dados" > Endereço)
+          addressFull: true,
+          addressCity: true,
+          addressState: true,
+          addressZipcode: true,
+          addressNumber: true,
+
+          // Pagamento (modal "Dados" > Pagamento)
+          pixKey: true,
+          bankName: true,
+          bankAgency: true,
+          bankAccount: true,
+          bankAccountType: true,
+          bankHolderDoc: true,
+          bankHolderName: true,
+
+          // Extra
+          stallsDescription: true,
         },
+      },
 
-        stallFairs: {
-          orderBy: { createdAt: 'desc' },
-          include: {
-            stall: {
-              select: {
-                id: true,
-                ownerId: true,
-                pdvName: true,
-                stallType: true,
-                stallSize: true,
-                machinesQty: true,
-                bannerName: true,
-                mainCategory: true,
-                teamQty: true,
-              },
+      stallFairs: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          stallId: true,
+          createdAt: true,
+          stall: {
+            select: {
+              id: true,
+              ownerId: true,
+              pdvName: true,
+              stallType: true,
+              stallSize: true,
+              machinesQty: true,
+              bannerName: true,
+              mainCategory: true,
+              teamQty: true,
             },
-            purchase: {
-              select: {
-                id: true,
-                stallSize: true,
-                unitPriceCents: true,
-                qty: true,
-                usedQty: true,
-                status: true,
-              },
-            },
           },
-        },
-
-        ownerFairPurchases: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            installments: { orderBy: { number: 'asc' } },
-          },
-        },
-
-        contract: {
-          select: {
-            id: true,
-            templateId: true,
-            addendumTemplateId: true,
-            pdfPath: true,
-            assinafyDocumentId: true,
-            signUrl: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
-
-        addendum: {
-          select: {
-            id: true,
-            templateId: true,
-            templateVersionNumber: true,
-            createdAt: true,
-            updatedAt: true,
-            template: {
-              select: {
-                id: true,
-                title: true,
-                status: true,
-                isAddendum: true,
-                updatedAt: true,
-              },
+          purchase: {
+            select: {
+              id: true,
+              stallSize: true,
+              unitPriceCents: true,
+              qty: true,
+              usedQty: true,
+              status: true,
             },
           },
         },
       },
+
+      ownerFairPurchases: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          stallSize: true,
+          qty: true,
+          unitPriceCents: true,
+          totalCents: true,
+          paidCents: true,
+          paidAt: true,
+          installmentsCount: true,
+          status: true,
+          usedQty: true,
+          createdAt: true,
+          updatedAt: true,
+          installments: {
+            orderBy: { number: 'asc' },
+            select: {
+              id: true,
+              number: true,
+              dueDate: true,
+              amountCents: true,
+              paidAt: true,
+              paidAmountCents: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+        },
+      },
+
+      contract: {
+        select: {
+          id: true,
+          templateId: true,
+          addendumTemplateId: true,
+          pdfPath: true,
+          assinafyDocumentId: true,
+          signUrl: true,
+          signedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+
+      addendum: {
+        select: {
+          id: true,
+          templateId: true,
+          templateVersionNumber: true,
+          createdAt: true,
+          updatedAt: true,
+          template: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              isAddendum: true,
+              updatedAt: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const stallsReserved = ownerFairs.reduce((acc, x) => acc + (x.stallsQty ?? 0), 0)
+  const stallsCapacity = Number(fair.stallsCapacity ?? 0)
+  const stallsRemaining = Math.max(0, stallsCapacity - stallsReserved)
+
+  const items = ownerFairs.map((of) => {
+    const stallFairs = Array.isArray(of.stallFairs) ? of.stallFairs : []
+    const purchases = Array.isArray(of.ownerFairPurchases) ? of.ownerFairPurchases : []
+
+    const linkedStalls = stallFairs.map((sf) => sf.stall)
+    const stallsQtyLinked = linkedStalls.length
+
+    const aggregatedPayment = this.toAggregatedPaymentFromPurchases(purchases)
+    const isPaid = aggregatedPayment.status === OwnerFairPaymentStatus.PAID
+
+    const computed = this.computeEffectiveStatus({
+      savedStatus: of.status as OwnerFairStatus,
+      contractSignedAt: of.contractSignedAt,
+      stallsQtyPurchased: of.stallsQty,
+      stallsQtyLinked,
+      isPaid: !!isPaid,
     })
 
-    const stallsReserved = ownerFairs.reduce((acc, x) => acc + (x.stallsQty ?? 0), 0)
-    const stallsCapacity = Number(fair.stallsCapacity ?? 0)
-    const stallsRemaining = Math.max(0, stallsCapacity - stallsReserved)
+    const signedAt = of.contractSignedAt ? of.contractSignedAt.toISOString() : null
+    const signUrl =
+      signedAt
+        ? null
+        : of.contract?.signUrl
+          ? of.contract.signUrl
+          : of.contract?.assinafyDocumentId
+            ? `https://app.assinafy.com.br/sign/${of.contract.assinafyDocumentId}`
+            : null
 
-    const items = ownerFairs.map((of) => {
-      const stallFairs = Array.isArray(of.stallFairs) ? of.stallFairs : []
-      const purchases = Array.isArray(of.ownerFairPurchases) ? of.ownerFairPurchases : []
+    const contractSummary = {
+      fairTemplate: fair.contractSettings?.template
+        ? {
+            id: fair.contractSettings.template.id,
+            title: fair.contractSettings.template.title,
+            status: fair.contractSettings.template.status,
+            updatedAt: fair.contractSettings.template.updatedAt.toISOString(),
+          }
+        : null,
 
-      const linkedStalls = stallFairs.map((sf) => sf.stall)
-      const stallsQtyLinked = linkedStalls.length
+      instance: of.contract
+        ? {
+            id: of.contract.id,
+            templateId: of.contract.templateId,
+            addendumTemplateId: of.contract.addendumTemplateId ?? null,
+            pdfPath: of.contract.pdfPath ?? null,
+            assinafyDocumentId: of.contract.assinafyDocumentId ?? null,
+            createdAt: of.contract.createdAt.toISOString(),
+            updatedAt: of.contract.updatedAt.toISOString(),
+          }
+        : null,
 
-      const aggregatedPayment = this.toAggregatedPaymentFromPurchases(purchases)
-      const isPaid = aggregatedPayment.status === OwnerFairPaymentStatus.PAID
+      addendumChoice: of.addendum
+        ? {
+            id: of.addendum.id,
+            templateId: of.addendum.templateId,
+            templateTitle: of.addendum.template?.title ?? null,
+            templateStatus: of.addendum.template?.status ?? null,
+            templateVersionNumber: of.addendum.templateVersionNumber,
+            createdAt: of.addendum.createdAt.toISOString(),
+            updatedAt: of.addendum.updatedAt.toISOString(),
+          }
+        : null,
 
-      const computed = this.computeEffectiveStatus({
-        savedStatus: of.status as OwnerFairStatus,
-        contractSignedAt: of.contractSignedAt,
-        stallsQtyPurchased: of.stallsQty,
-        stallsQtyLinked,
-        isPaid: !!isPaid,
-      })
+      signedAt,
+      signUrl,
+      hasPdf: Boolean(of.contract?.pdfPath),
+      hasContractInstance: Boolean(of.contract?.id),
+    }
 
-      const signedAt = of.contractSignedAt ? of.contractSignedAt.toISOString() : null
-      const signUrl =
-        signedAt
-          ? null
-          : of.contract?.signUrl
-            ? of.contract.signUrl
-            : of.contract?.assinafyDocumentId
-              ? `https://app.assinafy.com.br/sign/${of.contract.assinafyDocumentId}`
-              : null
+    const purchasesPayments = purchases.map((p) => this.toPurchasePaymentSummary(p))
 
-      const contractSummary = {
-        fairTemplate: fair.contractSettings?.template
-          ? {
+    const stallsLinked = stallFairs.map((sf) => ({
+      stallFairId: sf.id,
+      stallId: sf.stallId,
+      createdAt: sf.createdAt.toISOString(),
+      stall: sf.stall,
+      purchase: sf.purchase
+        ? {
+            id: sf.purchase.id,
+            stallSize: sf.purchase.stallSize,
+            unitPriceCents: sf.purchase.unitPriceCents,
+            qty: sf.purchase.qty,
+            usedQty: sf.purchase.usedQty,
+            status: sf.purchase.status,
+          }
+        : null,
+    }))
+
+    return {
+      ownerFairId: of.id,
+      fairId: of.fairId,
+
+      owner: of.owner,
+
+      stallsQtyPurchased: of.stallsQty,
+      stallsQtyLinked,
+      linkedStalls,
+
+      status: computed.status,
+      isComplete: computed.isComplete,
+
+      contractSignedAt: signedAt,
+
+      // ✅ Observações no retorno para a nova tab
+      observations: of.observations ?? null,
+
+      payment: aggregatedPayment,
+
+      purchasesPayments,
+      stallFairs: stallsLinked,
+
+      contract: contractSummary,
+    }
+  })
+
+  return {
+    fair: {
+      id: fair.id,
+      name: fair.name,
+      status: fair.status,
+      address: fair.address,
+
+      stallsCapacity,
+      stallsReserved,
+      stallsRemaining,
+
+      occurrences: fair.occurrences.map((o) => ({
+        ...o,
+        startsAt: o.startsAt.toISOString(),
+        endsAt: o.endsAt.toISOString(),
+      })),
+
+      contractSettings: fair.contractSettings
+        ? {
+            id: fair.contractSettings.id,
+            templateId: fair.contractSettings.templateId,
+            updatedAt: fair.contractSettings.updatedAt.toISOString(),
+            updatedByUserId: fair.contractSettings.updatedByUserId ?? null,
+            template: {
               id: fair.contractSettings.template.id,
               title: fair.contractSettings.template.title,
               status: fair.contractSettings.template.status,
+              isAddendum: fair.contractSettings.template.isAddendum,
               updatedAt: fair.contractSettings.template.updatedAt.toISOString(),
-            }
-          : null,
+            },
+          }
+        : null,
 
-        instance: of.contract
-          ? {
-              id: of.contract.id,
-              templateId: of.contract.templateId,
-              addendumTemplateId: of.contract.addendumTemplateId ?? null,
-              pdfPath: of.contract.pdfPath ?? null,
-              assinafyDocumentId: of.contract.assinafyDocumentId ?? null,
-              createdAt: of.contract.createdAt.toISOString(),
-              updatedAt: of.contract.updatedAt.toISOString(),
-            }
-          : null,
+      createdAt: fair.createdAt.toISOString(),
+      updatedAt: fair.updatedAt.toISOString(),
+    },
 
-        addendumChoice: of.addendum
-          ? {
-              id: of.addendum.id,
-              templateId: of.addendum.templateId,
-              templateTitle: of.addendum.template?.title ?? null,
-              templateStatus: of.addendum.template?.status ?? null,
-              templateVersionNumber: of.addendum.templateVersionNumber,
-              createdAt: of.addendum.createdAt.toISOString(),
-              updatedAt: of.addendum.updatedAt.toISOString(),
-            }
-          : null,
-
-        signedAt,
-        signUrl,
-        hasPdf: Boolean(of.contract?.pdfPath),
-        hasContractInstance: Boolean(of.contract?.id),
-      }
-
-      const purchasesPayments = purchases.map((p) => this.toPurchasePaymentSummary(p))
-
-      const stallsLinked = stallFairs.map((sf) => ({
-        stallFairId: sf.id,
-        stallId: sf.stallId,
-        createdAt: sf.createdAt.toISOString(),
-        stall: sf.stall,
-        purchase: sf.purchase
-          ? {
-              id: sf.purchase.id,
-              stallSize: sf.purchase.stallSize,
-              unitPriceCents: sf.purchase.unitPriceCents,
-              qty: sf.purchase.qty,
-              usedQty: sf.purchase.usedQty,
-              status: sf.purchase.status,
-            }
-          : null,
-      }))
-
-      return {
-        ownerFairId: of.id,
-        fairId: of.fairId,
-
-        // ✅ agora contém endereço + pagamento
-        owner: of.owner,
-
-        stallsQtyPurchased: of.stallsQty,
-        stallsQtyLinked,
-        linkedStalls,
-
-        status: computed.status,
-        isComplete: computed.isComplete,
-
-        contractSignedAt: signedAt,
-
-        payment: aggregatedPayment,
-
-        purchasesPayments,
-        stallFairs: stallsLinked,
-
-        contract: contractSummary,
-      }
-    })
-
-    return {
-      fair: {
-        id: fair.id,
-        name: fair.name,
-        status: fair.status,
-        address: fair.address,
-
-        stallsCapacity,
-        stallsReserved,
-        stallsRemaining,
-
-        occurrences: fair.occurrences.map((o) => ({
-          ...o,
-          startsAt: o.startsAt.toISOString(),
-          endsAt: o.endsAt.toISOString(),
-        })),
-
-        contractSettings: fair.contractSettings
-          ? {
-              id: fair.contractSettings.id,
-              templateId: fair.contractSettings.templateId,
-              updatedAt: fair.contractSettings.updatedAt.toISOString(),
-              updatedByUserId: fair.contractSettings.updatedByUserId ?? null,
-              template: {
-                id: fair.contractSettings.template.id,
-                title: fair.contractSettings.template.title,
-                status: fair.contractSettings.template.status,
-                isAddendum: fair.contractSettings.template.isAddendum,
-                updatedAt: fair.contractSettings.template.updatedAt.toISOString(),
-              },
-            }
-          : null,
-
-        createdAt: fair.createdAt.toISOString(),
-        updatedAt: fair.updatedAt.toISOString(),
-      },
-
-      items,
-    }
+    items,
   }
+}
+
 
   // ---------------------------------------------------------
   // PATCH installments (AGORA: por PURCHASE)
@@ -974,6 +1032,22 @@ export class FairsService {
         },
       })
 
+      // ✅ NOVO: se ficou 100% pago, recomputa status do OwnerFair (pendências -> concluído)
+      let ownerFairStatusInfo: any = null
+      if (
+        this.shouldRecomputeOwnerFairAfterPurchaseUpdate({
+          totalCents: updatedPurchase.totalCents,
+          paidCents: updatedPurchase.paidCents,
+        })
+      ) {
+        ownerFairStatusInfo = await this.recomputeAndApplyOwnerFairStatus(
+          tx,
+          purchase.ownerFairId,
+          actorUserId,
+          { trigger: 'SETTLE_INSTALLMENTS', purchaseId },
+        )
+      }
+
       return {
         ok: true,
         purchaseId: updatedPurchase.id,
@@ -982,9 +1056,13 @@ export class FairsService {
         paidCount: updatedPurchase.installments.filter((i) => !!i.paidAt).length,
         paidCents: updatedPurchase.paidCents,
         totalCents: updatedPurchase.totalCents,
+        // ✅ NOVO (útil pro front): status do expositor pode mudar automaticamente
+        ownerFairStatus: ownerFairStatusInfo?.status ?? null,
+        ownerFairStatusInfo,
       }
     })
   }
+
 
   // ---------------------------------------------------------
   // Status do expositor
@@ -996,37 +1074,374 @@ export class FairsService {
    * - Esse status NÃO é o “status calculado” (CONCLUIDO).
    * - O CONCLUIDO é calculado via computeEffectiveStatus para evitar inconsistência.
    */
-  async updateExhibitorStatus(
-    fairId: string,
-    ownerId: string,
-    dto: UpdateExhibitorStatusDto,
-    actorUserId: string,
-  ) {
-    return this.prisma.$transaction(async (tx) => {
-      const before = await tx.ownerFair.findUnique({
-        where: { ownerId_fairId: { ownerId, fairId } },
-      })
-      if (!before)
-        throw new NotFoundException(
-          'Vínculo do expositor com a feira não encontrado.',
-        )
-
-      const after = await tx.ownerFair.update({
-        where: { ownerId_fairId: { ownerId, fairId } },
-        data: { status: dto.status },
-      })
-
-      await this.audit.log(tx, {
-        action: AuditAction.UPDATE,
-        entity: AuditEntity.OWNER_FAIR,
-        entityId: after.id,
-        actorUserId,
-        before,
-        after,
-      })
-
-      return after
+async updateExhibitorStatus(
+  fairId: string,
+  ownerId: string,
+  dto: UpdateExhibitorStatusDto,
+  actorUserId: string,
+) {
+  return this.prisma.$transaction(async (tx) => {
+    const before = await tx.ownerFair.findUnique({
+      where: { ownerId_fairId: { ownerId, fairId } },
+      include: {
+        stallFairs: true,
+        contract: true,
+        ownerFairPurchases: {
+          include: { installments: true },
+        },
+      },
     })
+
+    if (!before) {
+      throw new NotFoundException('Vínculo do expositor com a feira não encontrado.')
+    }
+
+    const requestedStatus = dto.status
+
+    /**
+     * =========================
+     * 1) Calcula sinais do domínio
+     * =========================
+     * Observação:
+     * - Aqui a gente não impõe uma “ordem fixa”.
+     * - Só usa para validar se o status pedido faz sentido
+     *   e, no caso de CONCLUIDO, garantir que tudo está ok.
+     */
+    const purchases = before.ownerFairPurchases ?? []
+    const purchasedQty = purchases.reduce((acc, p) => acc + (p.qty ?? 0), 0)
+    const linkedQty = before.stallFairs?.length ?? 0
+
+    const totalCents = purchases.reduce((acc, p) => acc + (p.totalCents ?? 0), 0)
+    const paidCents = purchases.reduce((acc, p) => acc + (p.paidCents ?? 0), 0)
+    const remainingCents = Math.max(0, totalCents - paidCents)
+
+    const openInstallmentsCount = purchases.reduce((acc, p) => {
+      const open = (p.installments ?? []).filter((i) => !i.paidAt).length
+      return acc + open
+    }, 0)
+
+    const isFullyPaid = remainingCents === 0 && openInstallmentsCount === 0
+    const isSigned = Boolean(before.contractSignedAt || before.contract?.signedAt)
+
+    const hasPurchases = purchasedQty > 0
+    const stallsAreComplete = hasPurchases && linkedQty >= purchasedQty
+
+    /**
+     * Helper: define status “coerente” com base no estado real.
+     * Responsabilidade:
+     * - Se alguém pede um status que não faz sentido, usamos esse fallback
+     *   para escolher um status aplicável e explicável.
+     */
+    const computeFallbackStatus = () => {
+      if (!isFullyPaid) return OwnerFairStatus.AGUARDANDO_PAGAMENTO
+      if (!isSigned) return OwnerFairStatus.AGUARDANDO_ASSINATURA
+      if (!hasPurchases || !stallsAreComplete) return OwnerFairStatus.AGUARDANDO_BARRACAS
+      return OwnerFairStatus.CONCLUIDO
+    }
+
+    /**
+     * =========================
+     * 2) Valida se o status solicitado é aplicável
+     * =========================
+     * Regra que você definiu:
+     * - Não existe ordem fixa.
+     * - Para mudar para um status intermediário, basta "fazer sentido" estar nele.
+     * - Só CONCLUIDO exige tudo OK.
+     */
+    const missing: string[] = []
+    const notes: string[] = []
+
+    let effectiveStatus: OwnerFairStatus = requestedStatus
+
+    // ✅ CONCLUIDO: exige tudo OK
+    if (requestedStatus === OwnerFairStatus.CONCLUIDO) {
+      if (!isFullyPaid) {
+        missing.push(
+          `Pagamento pendente: faltam ${remainingCents} centavos (total=${totalCents}, pago=${paidCents}).`,
+        )
+        if (openInstallmentsCount > 0) {
+          missing.push(`Existem ${openInstallmentsCount} parcela(s) em aberto.`)
+        }
+      }
+
+      if (!isSigned) {
+        missing.push('Contrato ainda não foi assinado.')
+      }
+
+      if (!hasPurchases) {
+        missing.push('Nenhuma compra de barraca registrada para este expositor.')
+      }
+
+      if (hasPurchases && !stallsAreComplete) {
+        missing.push(
+          `Barracas pendentes: vinculadas=${linkedQty}, compradas=${purchasedQty}.`,
+        )
+      }
+
+      if (missing.length > 0) {
+        // Não pode concluir -> cai no status coerente do momento
+        effectiveStatus = computeFallbackStatus()
+        notes.push(
+          `Não foi possível concluir. Status ajustado para (${effectiveStatus}) com base nas pendências.`,
+        )
+      } else {
+        notes.push('Concluído: pagamento, assinatura e barracas estão OK.')
+      }
+    }
+
+    // ✅ AGUARDANDO_PAGAMENTO: só faz sentido se NÃO estiver 100% pago
+    if (requestedStatus === OwnerFairStatus.AGUARDANDO_PAGAMENTO) {
+      if (isFullyPaid) {
+        effectiveStatus = computeFallbackStatus()
+        missing.push('O pagamento já está 100% quitado.')
+        notes.push(
+          `Status solicitado (${requestedStatus}) não faz sentido agora. Status ajustado para (${effectiveStatus}).`,
+        )
+      } else {
+        notes.push('Status aplicado: ainda existe pendência de pagamento.')
+      }
+    }
+
+    // ✅ AGUARDANDO_ASSINATURA: só faz sentido se NÃO estiver assinado
+    if (requestedStatus === OwnerFairStatus.AGUARDANDO_ASSINATURA) {
+      if (isSigned) {
+        effectiveStatus = computeFallbackStatus()
+        missing.push('O contrato já está assinado.')
+        notes.push(
+          `Status solicitado (${requestedStatus}) não faz sentido agora. Status ajustado para (${effectiveStatus}).`,
+        )
+      } else {
+        notes.push('Status aplicado: assinatura pendente.')
+      }
+    }
+
+    // ✅ AGUARDANDO_BARRACAS: faz sentido se:
+    // - existe compra e não completou vínculo
+    // - OU não existe compra ainda (pendência operacional)
+    if (requestedStatus === OwnerFairStatus.AGUARDANDO_BARRACAS) {
+      if (hasPurchases && stallsAreComplete) {
+        effectiveStatus = computeFallbackStatus()
+        missing.push('As barracas já estão todas vinculadas para o total comprado.')
+        notes.push(
+          `Status solicitado (${requestedStatus}) não faz sentido agora. Status ajustado para (${effectiveStatus}).`,
+        )
+      } else {
+        // Aqui você explicitou: pode colocar "aguardando barracas" mesmo sem pagar/assinar.
+        notes.push('Status aplicado: pendência de vínculo de barracas (ou compras ainda não definidas).')
+      }
+    }
+
+    // ✅ SELECIONADO: sempre aplicável (não valida nada)
+    if (requestedStatus === OwnerFairStatus.SELECIONADO) {
+      notes.push('Status aplicado: selecionado.')
+    }
+
+    /**
+     * Segurança final: se por algum motivo o effectiveStatus ficou undefined,
+     * usa fallback coerente.
+     */
+    if (!effectiveStatus) {
+      effectiveStatus = computeFallbackStatus()
+      notes.push(`Status ajustado automaticamente para (${effectiveStatus}).`)
+    }
+
+    /**
+     * =========================
+     * 3) Persistência + auditoria
+     * =========================
+     * Se não mudou nada, não escreve no banco.
+     */
+    if (before.status === effectiveStatus) {
+      return {
+        ownerFair: before,
+        info: {
+          requestedStatus,
+          appliedStatus: effectiveStatus,
+          missing,
+          notes,
+        },
+      }
+    }
+
+    const after = await tx.ownerFair.update({
+      where: { ownerId_fairId: { ownerId, fairId } },
+      data: { status: effectiveStatus },
+    })
+
+    await this.audit.log(tx, {
+      action: AuditAction.UPDATE,
+      entity: AuditEntity.OWNER_FAIR,
+      entityId: after.id,
+      actorUserId,
+      before,
+      after,
+      meta: {
+        requestedStatus,
+        appliedStatus: effectiveStatus,
+        missing,
+        notes,
+
+        // sinais (úteis no log/auditoria)
+        purchasedQty,
+        linkedQty,
+        totalCents,
+        paidCents,
+        remainingCents,
+        openInstallmentsCount,
+        isFullyPaid,
+        isSigned,
+        hasPurchases,
+        stallsAreComplete,
+      },
+    })
+
+    return {
+      ownerFair: after,
+      info: {
+        requestedStatus,
+        appliedStatus: effectiveStatus,
+        missing,
+        notes,
+      },
+    }
+  })
+}
+
+
+
+  /**
+   * Recalcula e, se necessário, atualiza o status do OwnerFair com base no estado real.
+   * Regra (primeiro gargalo):
+   * - Se não está 100% pago => AGUARDANDO_PAGAMENTO
+   * - Senão se não assinou => AGUARDANDO_ASSINATURA
+   * - Senão se barracas incompletas (ou sem compras) => AGUARDANDO_BARRACAS
+   * - Senão => CONCLUIDO
+   *
+   * Observação:
+   * - Este helper não depende do "status solicitado". Ele impõe consistência do domínio.
+   */
+  private async recomputeAndApplyOwnerFairStatus(
+    tx: any,
+    ownerFairId: string,
+    actorUserId: string,
+    meta?: Record<string, any>,
+  ) {
+    const ownerFair = await tx.ownerFair.findUnique({
+      where: { id: ownerFairId },
+      include: {
+        stallFairs: true,
+        contract: true,
+        ownerFairPurchases: {
+          include: { installments: true },
+        },
+      },
+    })
+
+    if (!ownerFair) {
+      throw new NotFoundException('OwnerFair não encontrado para recomputar status.')
+    }
+
+    const purchases = Array.isArray(ownerFair.ownerFairPurchases)
+      ? ownerFair.ownerFairPurchases
+      : []
+
+    const purchasedQty = purchases.reduce((acc, p) => acc + (p.qty ?? 0), 0)
+    const linkedQty = ownerFair.stallFairs?.length ?? 0
+
+    const totalCents = purchases.reduce((acc, p) => acc + (p.totalCents ?? 0), 0)
+    const paidCents = purchases.reduce((acc, p) => acc + (p.paidCents ?? 0), 0)
+    const remainingCents = Math.max(0, totalCents - paidCents)
+
+    const isFullyPaid = remainingCents === 0
+    const isSigned = Boolean(ownerFair.contractSignedAt || ownerFair.contract?.signedAt)
+
+    const hasPurchases = purchasedQty > 0
+    const stallsAreComplete = hasPurchases && linkedQty >= purchasedQty
+
+    const missing: string[] = []
+
+    let effectiveStatus: OwnerFairStatus
+
+    if (!isFullyPaid) {
+      effectiveStatus = OwnerFairStatus.AGUARDANDO_PAGAMENTO
+      missing.push(
+        `Pagamento pendente: faltam ${remainingCents} centavos (total=${totalCents}, pago=${paidCents}).`,
+      )
+    } else if (!isSigned) {
+      effectiveStatus = OwnerFairStatus.AGUARDANDO_ASSINATURA
+      missing.push('Contrato ainda não foi assinado.')
+    } else if (!hasPurchases) {
+      effectiveStatus = OwnerFairStatus.AGUARDANDO_BARRACAS
+      missing.push('Nenhuma compra de barraca registrada para este expositor.')
+    } else if (!stallsAreComplete) {
+      effectiveStatus = OwnerFairStatus.AGUARDANDO_BARRACAS
+      missing.push(`Barracas pendentes: vinculadas=${linkedQty}, compradas=${purchasedQty}.`)
+    } else {
+      effectiveStatus = OwnerFairStatus.CONCLUIDO
+    }
+
+    // Se não mudou, não faz update nem auditoria
+    if (ownerFair.status === effectiveStatus) {
+      return {
+        updated: false,
+        ownerFairId: ownerFair.id,
+        status: ownerFair.status,
+        effectiveStatus,
+        missing,
+      }
+    }
+
+    const before = ownerFair
+
+    const after = await tx.ownerFair.update({
+      where: { id: ownerFair.id },
+      data: { status: effectiveStatus },
+    })
+
+    await this.audit.log(tx, {
+      action: AuditAction.UPDATE,
+      entity: AuditEntity.OWNER_FAIR,
+      entityId: after.id,
+      actorUserId,
+      before,
+      after,
+      meta: {
+        reason: 'RECOMPUTE_AFTER_PAYMENT_CHANGE',
+        missing,
+        purchasedQty,
+        linkedQty,
+        totalCents,
+        paidCents,
+        remainingCents,
+        isSigned,
+        ...meta,
+      },
+    })
+
+    return {
+      updated: true,
+      ownerFairId: after.id,
+      status: after.status,
+      effectiveStatus,
+      missing,
+    }
+  }
+
+  /**
+   * Helper para decidir se vale recomputar status.
+   * Você pediu: "se estiver tudo pago, verifica pendências e conclui se der".
+   *
+   * Então aqui só recomputamos se o expositor tiver totalCents > 0 e ficou 100% pago,
+   * ou se você quiser ser mais agressivo e recomputar sempre, basta retornar true.
+   */
+  private shouldRecomputeOwnerFairAfterPurchaseUpdate(args: {
+    totalCents: number
+    paidCents: number
+  }) {
+    // Se não existe valor a pagar, não força mudanças automáticas
+    if ((args.totalCents ?? 0) <= 0) return false
+
+    return (args.paidCents ?? 0) >= (args.totalCents ?? 0)
   }
 
   // ---------------------------------------------------------
@@ -1129,6 +1544,22 @@ export class FairsService {
         },
       })
 
+      // ✅ NOVO: se ficou 100% pago, recomputa status do OwnerFair (pendências -> concluído)
+      let ownerFairStatusInfo: any = null
+      if (
+        this.shouldRecomputeOwnerFairAfterPurchaseUpdate({
+          totalCents: purchaseUpdated.totalCents,
+          paidCents: purchaseUpdated.paidCents,
+        })
+      ) {
+        ownerFairStatusInfo = await this.recomputeAndApplyOwnerFairStatus(
+          tx,
+          purchase.ownerFairId,
+          actorUserId,
+          { trigger: 'RESCHEDULE_INSTALLMENT', purchaseId, installmentNumber },
+        )
+      }
+
       return {
         ok: true,
         purchaseId: purchaseUpdated.id,
@@ -1142,9 +1573,13 @@ export class FairsService {
         installmentPaidAmountCents: updatedInstallment.paidAmountCents ?? 0,
         installmentPaidAt: updatedInstallment.paidAt ? updatedInstallment.paidAt.toISOString() : null,
         installmentDueDate: updatedInstallment.dueDate.toISOString(),
+        // ✅ NOVO
+        ownerFairStatus: ownerFairStatusInfo?.status ?? null,
+        ownerFairStatusInfo,
       }
     })
   }
+
 
   // ---------------------------------------------------------
   // Registrar pagamento parcial (histórico)
@@ -1277,6 +1712,22 @@ export class FairsService {
         },
       })
 
+      // ✅ NOVO: se ficou 100% pago, recomputa status do OwnerFair (pendências -> concluído)
+      let ownerFairStatusInfo: any = null
+      if (
+        this.shouldRecomputeOwnerFairAfterPurchaseUpdate({
+          totalCents: purchaseUpdated.totalCents,
+          paidCents: purchaseUpdated.paidCents,
+        })
+      ) {
+        ownerFairStatusInfo = await this.recomputeAndApplyOwnerFairStatus(
+          tx,
+          purchase.ownerFairId,
+          actorUserId,
+          { trigger: 'CREATE_INSTALLMENT_PAYMENT', purchaseId, installmentNumber },
+        )
+      }
+
       return {
         ok: true,
         purchaseId: purchaseUpdated.id,
@@ -1290,7 +1741,62 @@ export class FairsService {
         installmentPaidAmountCents: installmentUpdated.paidAmountCents ?? 0,
         installmentPaidAt: installmentUpdated.paidAt ? installmentUpdated.paidAt.toISOString() : null,
         installmentDueDate: installmentUpdated.dueDate.toISOString(),
+        // ✅ NOVO
+        ownerFairStatus: ownerFairStatusInfo?.status ?? null,
+        ownerFairStatusInfo,
       }
     })
   }
+
+  /**
+ * Atualiza o campo de observações do OwnerFair (vínculo expositor ↔ feira).
+ * Por decisão de UX, a API recebe (fairId, ownerId) e resolve o OwnerFair internamente.
+ */
+  async updateExhibitorObservations(params: {
+    fairId: string;
+    ownerId: string;
+    observations: string | null;
+    actorUserId: string;
+  }) {
+    const { fairId, ownerId, observations, actorUserId } = params;
+
+    // Regra simples: normaliza string vazia para null (evita salvar lixo e facilita filtro depois)
+    const normalized =
+      observations && observations.trim().length > 0 ? observations.trim() : null;
+
+    const ownerFair = await this.prisma.ownerFair.findUnique({
+      where: {
+        ownerId_fairId: { ownerId, fairId },
+      },
+    });
+
+    if (!ownerFair) {
+      throw new NotFoundException('Vínculo do expositor com a feira não encontrado.');
+    }
+
+    // Atualiza e registra auditoria em transação para manter consistência.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.ownerFair.update({
+        where: { id: ownerFair.id },
+        data: { observations: normalized },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: AuditAction.UPDATE,
+          entity: AuditEntity.OWNER_FAIR,
+          entityId: ownerFair.id,
+          actorUserId,
+          before: { observations: ownerFair.observations },
+          after: { observations: updated.observations },
+          meta: { fairId, ownerId },
+        },
+      });
+
+      return updated;
+    });
+
+    return result;
+  }
+
 }

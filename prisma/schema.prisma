@@ -424,6 +424,12 @@ model OwnerFair {
    */
   addendum OwnerFairAddendum?
 
+  /**
+   * ✅ Observações internas do admin sobre este expositor nesta feira.
+   * Ex.: "Vai ficar perto do palco", "Precisa chegar mais cedo", "Aguardando ajuste de pagamento", etc.
+   */
+  observations String?
+
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   ownerFairPurchases OwnerFairPurchase[]
