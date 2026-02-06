@@ -37,6 +37,10 @@ prisma/*.js
 prisma/*.js.map
 prisma/*.d.ts
 
+# Dumps e backups de banco
+/backups/
+*.dump
+*.sql
 
 # IDE - VSCode
 .vscode/*

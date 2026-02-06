@@ -1,12 +1,12 @@
 services:
   db:
-    image: postgres:16
+    image: postgres:17
     container_name: feira_gastro_db
     restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: feira_gastro
+      POSTGRES_DB: onlyinbr_dev
     ports:
       - "5432:5432"
     volumes:

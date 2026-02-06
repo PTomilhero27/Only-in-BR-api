@@ -478,40 +478,100 @@ export class InterestFairsService {
     return created
   }
 
-  // ---------------------------------------------
-  // Remove vínculo (bloqueia se já houver barracas vinculadas)
-  // ---------------------------------------------
+  /**
+   * ✅ Remove vínculo (HARD REMOVE)
+   *
+   * Responsabilidade:
+   * - Remover COMPLETAMENTE tudo do expositor naquela feira:
+   *   - StallFair (barracas vinculadas)
+   *   - Compras + parcelas + histórico de pagamentos
+   *   - Contrato + assinatura (Contract / OwnerFair.contractSignedAt)
+   *   - Aditivo (OwnerFairAddendum)
+   *   - Vínculo âncora (OwnerFair)
+   *
+   * Por que essa ordem?
+   * - StallFair.purchaseId usa onDelete: Restrict => precisamos apagar StallFair primeiro.
+   * - OwnerFairPurchase -> Installments -> Payments estão em cascade => deleteMany de Purchase limpa tudo.
+   * - Contract/Addendum estão em cascade a partir do OwnerFair => deletar OwnerFair limpa.
+   */
   async remove(ownerId: string, fairId: string, actor: JwtPayload) {
     const existing = await this.prisma.ownerFair.findUnique({
       where: { ownerId_fairId: { ownerId, fairId } },
-      select: { id: true, stallsQty: true, _count: { select: { stallFairs: true } } },
+      include: {
+        stallFairs: { select: { id: true } },
+        ownerFairPurchases: { select: { id: true } },
+        contract: { select: { id: true, assinafyDocumentId: true } },
+        addendum: { select: { id: true } },
+      },
     })
 
     if (!existing) throw new NotFoundException('Vínculo não encontrado.')
 
-    // ✅ Proteção: não deixar remover se já existe StallFair (já “consumiu” compra)
-    if (existing._count.stallFairs > 0) {
-      throw new BadRequestException(
-        'Não é possível remover o vínculo: existem barracas já vinculadas nesta feira.',
-      )
+    // ✅ snapshot mínimo (auditoria)
+    const before = {
+      ownerFairId: existing.id,
+      ownerId,
+      fairId,
+      stallsQty: existing.stallsQty,
+      status: existing.status,
+      contractSignedAt: existing.contractSignedAt
+        ? existing.contractSignedAt.toISOString()
+        : null,
+      counts: {
+        stallFairs: existing.stallFairs.length,
+        purchases: existing.ownerFairPurchases.length,
+        hasContract: !!existing.contract,
+        hasAddendum: !!existing.addendum,
+      },
+      contract: existing.contract
+        ? {
+            id: existing.contract.id,
+            assinafyDocumentId: existing.contract.assinafyDocumentId ?? null,
+          }
+        : null,
     }
 
-    await this.prisma.ownerFair.delete({
-      where: { ownerId_fairId: { ownerId, fairId } },
-    })
+    // ✅ transação para garantir consistência
+    await this.prisma.$transaction(async (tx) => {
+      // 1) Remove barracas vinculadas (precisa vir antes por causa do Restrict em purchaseId)
+      if (existing.stallFairs.length > 0) {
+        await tx.stallFair.deleteMany({
+          where: { ownerFairId: existing.id },
+        })
+      }
 
-    await this.prisma.auditLog.create({
-      data: {
-        action: AuditAction.DELETE,
-        entity: AuditEntity.OWNER_FAIR,
-        entityId: existing.id,
-        actorUserId: actor.id,
-        before: this.toAuditJson({
-          ownerFairId: existing.id,
-          stallsQty: existing.stallsQty,
-        }),
-        after: this.toAuditJson({}),
-      },
+      // 2) Remove compras (cascade remove parcelas e payments)
+      if (existing.ownerFairPurchases.length > 0) {
+        await tx.ownerFairPurchase.deleteMany({
+          where: { ownerFairId: existing.id },
+        })
+      }
+
+      // 3) Remove o vínculo âncora (cascade remove Contract e OwnerFairAddendum)
+      await tx.ownerFair.delete({
+        where: { id: existing.id },
+      })
+
+      // 4) Auditoria
+      await tx.auditLog.create({
+        data: {
+          action: AuditAction.DELETE,
+          entity: AuditEntity.OWNER_FAIR,
+          entityId: existing.id,
+          actorUserId: actor.id,
+          before: this.toAuditJson(before),
+          after: this.toAuditJson({ ok: true }),
+          meta: this.toAuditJson({
+            mode: 'hard_remove',
+            removed: {
+              stallFairs: before.counts.stallFairs,
+              purchases: before.counts.purchases,
+              contract: before.counts.hasContract,
+              addendum: before.counts.hasAddendum,
+            },
+          }),
+        },
+      })
     })
 
     return { ok: true }
