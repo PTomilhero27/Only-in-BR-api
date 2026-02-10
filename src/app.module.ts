@@ -17,6 +17,9 @@ import { OwnersModule } from './modules/owners/owners.module';
 import { ExhibitorFairsModule } from './modules/exhibitor-fairs/exhibitor-fairs.module';
 import { PublicInterestsModule } from './modules/public/interests/public-interests.module';
 import { HealthModule } from './modules/health/health.module';
+import { ExcelTemplatesModule } from './modules/excel-templates/excel-templates.module';
+import { ExcelExportsModule } from './modules/excel-exports/excel-exports.module';
+import { ExcelDatasetsModule } from './modules/excel-datasets/excel-datasets.module';
 
 
 @Global()
@@ -36,9 +39,10 @@ import { HealthModule } from './modules/health/health.module';
     OwnersModule,
     ExhibitorFairsModule,
 
-
-    
-    PublicInterestsModule
+    PublicInterestsModule,
+    ExcelTemplatesModule,
+    ExcelExportsModule,
+    ExcelDatasetsModule
   ],
   controllers: [AppController],
   providers: [

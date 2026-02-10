@@ -99,6 +99,36 @@ enum OwnerFairPaymentStatus {
   CANCELLED
 }
 
+// =====================
+// EXCEL TEMPLATES (MVP)
+// =====================
+
+enum ExcelTemplateStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ExcelCellType {
+  TEXT
+  BIND
+}
+
+enum ExcelValueFormat {
+  TEXT
+  INT
+  MONEY_CENTS
+  DATE
+  DATETIME
+  BOOL
+}
+
+enum ExcelDataset {
+  FAIR
+  FAIR_EXHIBITORS
+  FAIR_STALLS
+  FAIR_FINANCIAL
+}
+
 model User {
   id String @id @default(uuid())
 
@@ -924,4 +954,160 @@ model OwnerFairAddendum {
   updatedAt DateTime @updatedAt
 
   @@index([templateId])
+}
+
+model ExcelTemplate {
+  id     String              @id @default(uuid())
+  name   String
+  status ExcelTemplateStatus @default(ACTIVE)
+
+  /**
+   * Abas que compõem o template.
+   */
+  sheets ExcelTemplateSheet[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model ExcelTemplateSheet {
+  id         String        @id @default(uuid())
+  templateId String
+  template   ExcelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  /**
+   * Nome da aba no Excel (ex.: "Relatório").
+   */
+  name String
+
+  /**
+   * Ordem de exibição das abas.
+   */
+  order Int @default(0)
+
+  /**
+   * Dataset base/contexto desta aba (para UI e validação).
+   */
+  dataset ExcelDataset
+
+  /**
+   * Células fixas (textos/binds).
+   */
+  cells ExcelTemplateCell[]
+
+  /**
+   * Tabelas dinâmicas (listas).
+   */
+  tables ExcelTemplateTable[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([templateId, name])
+  @@index([templateId])
+}
+
+model ExcelTemplateCell {
+  id      String             @id @default(uuid())
+  sheetId String
+  sheet   ExcelTemplateSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+
+  /**
+   * Linha/coluna no Excel (1-based).
+   */
+  row Int
+  col Int
+
+  /**
+   * TEXT => value literal
+   * BIND => value = fieldKey (ex.: "fair.name")
+   */
+  type  ExcelCellType
+  value String
+
+  /**
+   * Formato opcional (se não informado, pode vir do catálogo).
+   */
+  format ExcelValueFormat?
+
+  /**
+   * Estilo mínimo MVP.
+   */
+  bold Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sheetId, row, col])
+  @@index([sheetId])
+}
+
+model ExcelTemplateTable {
+  id      String             @id @default(uuid())
+  sheetId String
+  sheet   ExcelTemplateSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+
+  /**
+   * Célula âncora onde a tabela começa (1-based).
+   */
+  anchorRow Int
+  anchorCol Int
+
+  /**
+   * Dataset que será listado na tabela (ex.: FAIR_EXHIBITORS).
+   */
+  dataset ExcelDataset
+
+  /**
+   * Se true, escreve header na linha da âncora.
+   */
+  includeHeader Boolean @default(true)
+
+  /**
+   * Colunas configuráveis.
+   */
+  columns ExcelTemplateTableColumn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sheetId])
+}
+
+model ExcelTemplateTableColumn {
+  id      String             @id @default(uuid())
+  tableId String
+  table   ExcelTemplateTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  /**
+   * Ordem de exibição da coluna (0..N).
+   */
+  order Int @default(0)
+
+  /**
+   * Texto do header (ex.: "Nome").
+   */
+  header String
+
+  /**
+   * Chave do campo (ex.: "owner.fullName").
+   */
+  fieldKey String
+
+  /**
+   * Formatação opcional.
+   */
+  format ExcelValueFormat?
+
+  /**
+   * Largura opcional da coluna (ExcelJS).
+   */
+  width Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tableId])
 }

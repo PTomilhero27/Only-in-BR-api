@@ -525,9 +525,9 @@ export class InterestFairsService {
       },
       contract: existing.contract
         ? {
-            id: existing.contract.id,
-            assinafyDocumentId: existing.contract.assinafyDocumentId ?? null,
-          }
+          id: existing.contract.id,
+          assinafyDocumentId: existing.contract.assinafyDocumentId ?? null,
+        }
         : null,
     }
 

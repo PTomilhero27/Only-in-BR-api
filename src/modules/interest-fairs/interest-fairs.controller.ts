@@ -1,6 +1,6 @@
 // src/modules/interest-fairs/interest-fairs.controller.ts
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common'
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { ApiOkResponse, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { InterestFairsService } from './interest-fairs.service'
 import { LinkInterestToFairDto } from './dto/link-interest-to-fair.dto'
 import { CurrentUser } from 'src/common/decorators/current-user.decorator'
