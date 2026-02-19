@@ -1,5 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { ExcelTemplatesService } from './excel-templates.service';
 import { CreateExcelTemplateDto } from './dto/create-excel-template.dto';
@@ -14,6 +28,7 @@ import { ExcelTemplateResponseDto } from './dto/excel-template-response.dto';
  * Importante:
  * - Rotas autenticadas por default (guard global do projeto)
  * - Validações são feitas no service (fieldKey, colisões, etc.)
+ * - Agora o template suporta "scope" (FAIR, FAIR_OWNER, etc.) para o export dinâmico.
  */
 @ApiTags('Excel - Templates')
 @ApiBearerAuth()
@@ -29,7 +44,9 @@ export class ExcelTemplatesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtém um template completo (sheets/cells/tables/columns).' })
+  @ApiOperation({
+    summary: 'Obtém um template completo (sheets/cells/tables/columns).',
+  })
   @ApiParam({ name: 'id', description: 'ID do template.' })
   @ApiOkResponse({ type: ExcelTemplateResponseDto })
   getById(@Param('id') id: string): Promise<ExcelTemplateResponseDto> {
@@ -39,8 +56,9 @@ export class ExcelTemplatesController {
   @Post()
   @ApiOperation({ summary: 'Cria um template de Excel.' })
   @ApiOkResponse({ type: ExcelTemplateResponseDto })
-  create(@Body() dto: CreateExcelTemplateDto): Promise<ExcelTemplateResponseDto> {
-    console.log('Received create template request:', dto); // Log para debug
+  create(
+    @Body() dto: CreateExcelTemplateDto,
+  ): Promise<ExcelTemplateResponseDto> {
     return this.excelTemplatesService.create(dto);
   }
 
@@ -51,7 +69,10 @@ export class ExcelTemplatesController {
   })
   @ApiParam({ name: 'id', description: 'ID do template.' })
   @ApiOkResponse({ type: ExcelTemplateResponseDto })
-  update(@Param('id') id: string, @Body() dto: UpdateExcelTemplateDto): Promise<ExcelTemplateResponseDto> {
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateExcelTemplateDto,
+  ): Promise<ExcelTemplateResponseDto> {
     return this.excelTemplatesService.update(id, dto);
   }
 

@@ -1,8 +1,15 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
-import { IsArray, IsEnum, IsInt, IsOptional, Min, ValidateNested } from 'class-validator'
-import { OwnerFairPaymentStatus } from '@prisma/client'
-import { ExhibitorFairInstallmentDto } from './exhibitor-fair-installment.dto'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { OwnerFairPaymentStatus } from '@prisma/client';
+import { ExhibitorFairInstallmentDto } from './exhibitor-fair-installment.dto';
 
 /**
  * Resumo do pagamento do expositor em uma feira.
@@ -24,29 +31,36 @@ export class ExhibitorFairPaymentSummaryDto {
     example: 'PARTIALLY_PAID',
   })
   @IsEnum(OwnerFairPaymentStatus)
-  status: OwnerFairPaymentStatus
+  status: OwnerFairPaymentStatus;
 
-  @ApiProperty({ description: 'Valor total acordado (em centavos).', example: 45000 })
+  @ApiProperty({
+    description: 'Valor total acordado (em centavos).',
+    example: 45000,
+  })
   @IsInt()
   @Min(0)
-  totalCents: number
+  totalCents: number;
 
-  @ApiProperty({ description: 'Quantidade de parcelas (1 = à vista).', example: 3 })
+  @ApiProperty({
+    description: 'Quantidade de parcelas (1 = à vista).',
+    example: 3,
+  })
   @IsInt()
   @Min(1)
-  installmentsCount: number
+  installmentsCount: number;
 
   @ApiProperty({ description: 'Quantidade de parcelas já pagas.', example: 1 })
   @IsInt()
   @Min(0)
-  paidCount: number
+  paidCount: number;
 
   @ApiPropertyOptional({
-    description: 'Próximo vencimento em aberto (ISO). null => tudo pago ou sem parcelas.',
+    description:
+      'Próximo vencimento em aberto (ISO). null => tudo pago ou sem parcelas.',
     example: '2026-03-10T00:00:00.000Z',
   })
   @IsOptional()
-  nextDueDate?: string | null
+  nextDueDate?: string | null;
 
   @ApiProperty({
     type: [ExhibitorFairInstallmentDto],
@@ -55,5 +69,5 @@ export class ExhibitorFairPaymentSummaryDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ExhibitorFairInstallmentDto)
-  installments: ExhibitorFairInstallmentDto[]
+  installments: ExhibitorFairInstallmentDto[];
 }

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty } from '@nestjs/swagger';
 
 /**
  * DTO de resumo de FairForm na listagem de feiras.
@@ -16,37 +16,40 @@ import { ApiProperty } from '@nestjs/swagger'
 export class FairFormSummaryDto {
   @ApiProperty({
     example: 'stalls',
-    description: 'Identificador lógico do formulário (slug). Usado também na URL do form externo.',
+    description:
+      'Identificador lógico do formulário (slug). Usado também na URL do form externo.',
   })
-  slug: string
+  slug: string;
 
   @ApiProperty({
     example: 'Cadastro de barracas',
     description: 'Nome do formulário exibido no painel (catálogo global).',
   })
-  name: string
+  name: string;
 
   @ApiProperty({
     example: true,
     description: 'Se o formulário está ativo globalmente (Form.active).',
   })
-  active: boolean
+  active: boolean;
 
   @ApiProperty({
     example: true,
-    description: 'Se o formulário está habilitado para esta feira (FairForm.enabled).',
+    description:
+      'Se o formulário está habilitado para esta feira (FairForm.enabled).',
   })
-  enabled: boolean
+  enabled: boolean;
 
   @ApiProperty({
     example: '2026-01-21T20:21:00.000Z',
-    description: 'Início da janela de liberação do formulário nesta feira (ISO).',
+    description:
+      'Início da janela de liberação do formulário nesta feira (ISO).',
   })
-  startsAt: string
+  startsAt: string;
 
   @ApiProperty({
     example: '2026-01-28T20:21:00.000Z',
     description: 'Fim da janela de liberação do formulário nesta feira (ISO).',
   })
-  endsAt: string
+  endsAt: string;
 }

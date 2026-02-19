@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ExcelCellType, ExcelDataset, ExcelTemplateStatus, ExcelValueFormat } from '@prisma/client';
+import {
+  ExcelCellType,
+  ExcelDataset,
+  ExcelTemplateStatus,
+  ExcelValueFormat,
+} from '@prisma/client';
 
 /**
  * DTO completo de retorno do template, incluindo sheets/cells/tables/columns.
@@ -11,7 +16,10 @@ export class ExcelTemplateResponseDto {
   @ApiProperty({ example: 'Relatório da Feira (Admin)' })
   name!: string;
 
-  @ApiProperty({ enum: ExcelTemplateStatus, example: ExcelTemplateStatus.ACTIVE })
+  @ApiProperty({
+    enum: ExcelTemplateStatus,
+    example: ExcelTemplateStatus.ACTIVE,
+  })
   status!: ExcelTemplateStatus;
 
   @ApiProperty({ type: () => ExcelTemplateSheetResponseDto, isArray: true })
@@ -34,7 +42,10 @@ export class ExcelTemplateSheetResponseDto {
   @ApiProperty({ example: 0 })
   order!: number;
 
-  @ApiProperty({ enum: ExcelDataset, example: ExcelDataset.FAIR })
+  @ApiProperty({
+    enum: ExcelDataset,
+    example: ExcelDataset.FAIR_SUMMARY, // ✅ existe no seu Prisma
+  })
   dataset!: ExcelDataset;
 
   @ApiProperty({ type: () => ExcelTemplateCellResponseDto, isArray: true })
@@ -60,7 +71,10 @@ export class ExcelTemplateCellResponseDto {
   @ApiProperty({ example: 'Relatório' })
   value!: string;
 
-  @ApiPropertyOptional({ enum: ExcelValueFormat, example: ExcelValueFormat.TEXT })
+  @ApiPropertyOptional({
+    enum: ExcelValueFormat,
+    example: ExcelValueFormat.TEXT,
+  })
   format?: ExcelValueFormat | null;
 
   @ApiProperty({ example: true })
@@ -77,13 +91,19 @@ export class ExcelTemplateTableResponseDto {
   @ApiProperty({ example: 4 })
   anchorCol!: number;
 
-  @ApiProperty({ enum: ExcelDataset, example: ExcelDataset.FAIR_EXHIBITORS })
+  @ApiProperty({
+    enum: ExcelDataset,
+    example: ExcelDataset.FAIR_EXHIBITORS_LIST, // ✅ existe no seu Prisma
+  })
   dataset!: ExcelDataset;
 
   @ApiProperty({ example: true })
   includeHeader!: boolean;
 
-  @ApiProperty({ type: () => ExcelTemplateTableColumnResponseDto, isArray: true })
+  @ApiProperty({
+    type: () => ExcelTemplateTableColumnResponseDto,
+    isArray: true,
+  })
   columns!: ExcelTemplateTableColumnResponseDto[];
 }
 
@@ -100,7 +120,10 @@ export class ExcelTemplateTableColumnResponseDto {
   @ApiProperty({ example: 'owner.fullName' })
   fieldKey!: string;
 
-  @ApiPropertyOptional({ enum: ExcelValueFormat, example: ExcelValueFormat.TEXT })
+  @ApiPropertyOptional({
+    enum: ExcelValueFormat,
+    example: ExcelValueFormat.TEXT,
+  })
   format?: ExcelValueFormat | null;
 
   @ApiPropertyOptional({ example: 28 })

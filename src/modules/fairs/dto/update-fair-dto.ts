@@ -1,6 +1,17 @@
-import { ApiPropertyOptional } from '@nestjs/swagger'
-import { IsEnum, IsOptional, IsString, IsNotEmpty, Min, IsInt } from 'class-validator'
-import { FairStatus } from '@prisma/client'
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { FairStatus } from '@prisma/client';
+import { FairTaxUpsertDto } from './fair-tax.dto';
 
 /**
  * DTO para atualização de uma feira (PATCH).
@@ -10,9 +21,13 @@ import { FairStatus } from '@prisma/client'
  *
  * Decisões importantes:
  * - Este DTO NÃO permite editar ocorrências.
- *   As datas/horários serão tratadas em endpoints próprios no futuro.
- * - Todos os campos são opcionais, mas ao menos um deve ser enviado
- *   (essa validação acontece no service).
+ * - Todos os campos são opcionais.
+ *
+ * Taxas:
+ * - Se `taxes` vier:
+ *   - id ausente => cria taxa
+ *   - id presente => edita taxa (somente se não estiver em uso)
+ *   - taxa existente que não vier na lista => tentativa de exclusão (somente se não estiver em uso)
  */
 export class UpdateFairDto {
   @ApiPropertyOptional({
@@ -22,7 +37,7 @@ export class UpdateFairDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  name?: string
+  name?: string;
 
   @ApiPropertyOptional({
     example: 'Rua das Palmeiras, 500 - Centro',
@@ -31,7 +46,7 @@ export class UpdateFairDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  address?: string
+  address?: string;
 
   @ApiPropertyOptional({
     enum: FairStatus,
@@ -40,7 +55,7 @@ export class UpdateFairDto {
   })
   @IsOptional()
   @IsEnum(FairStatus)
-  status?: FairStatus
+  status?: FairStatus;
 
   @ApiPropertyOptional({
     example: 150,
@@ -49,5 +64,19 @@ export class UpdateFairDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  stallsCapacity?: number
+  stallsCapacity?: number;
+
+  @ApiPropertyOptional({
+    type: [FairTaxUpsertDto],
+    description: 'Lista final de taxas da feira (cria/edita/remove por diff).',
+    example: [
+      { id: 'tax-uuid-1', name: 'Taxa padrão', percentBps: 500 },
+      { name: 'Taxa carrinho', percentBps: 700 },
+    ],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FairTaxUpsertDto)
+  taxes?: FairTaxUpsertDto[];
 }

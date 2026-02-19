@@ -9,9 +9,8 @@ import { CreateExcelExportDto } from './dto/create-excel-export.dto';
  * ✅ ExcelExportsController
  *
  * Endpoint de exportação do Excel.
- * Importante:
- * - Retorna o arquivo como download (.xlsx)
- * - A autenticação é aplicada por default pelo guard global do projeto.
+ * - Retorna arquivo como download (.xlsx)
+ * - Autenticação já é aplicada pelo guard global
  */
 @ApiTags('Excel - Exports')
 @ApiBearerAuth()
@@ -21,7 +20,8 @@ export class ExcelExportsController {
 
   @Post()
   @ApiOperation({
-    summary: 'Gera um Excel a partir de um template e parâmetros (fairId obrigatório, ownerId opcional).',
+    summary:
+      'Gera um Excel a partir de um template e um scope (MVP: fairId obrigatório; ownerId opcional).',
   })
   async create(@Body() dto: CreateExcelExportDto, @Res() res: Response) {
     const { filename, buffer } = await this.excelExportsService.generate(dto);
@@ -31,7 +31,6 @@ export class ExcelExportsController {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
     return res.send(buffer);
   }
 }

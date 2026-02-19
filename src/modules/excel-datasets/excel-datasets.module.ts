@@ -7,6 +7,6 @@ import { ExcelCoreModule } from 'src/excel/excel-core.module';
   controllers: [ExcelDatasetsController],
   providers: [ExcelDatasetsService],
   imports: [ExcelCoreModule],
-  exports: [ExcelDatasetsService]
+  exports: [ExcelDatasetsService],
 })
 export class ExcelDatasetsModule {}

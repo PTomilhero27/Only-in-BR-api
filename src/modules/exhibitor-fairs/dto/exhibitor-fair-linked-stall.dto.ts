@@ -1,37 +1,126 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { IsEnum, IsISO8601, IsString } from 'class-validator'
-import { StallSize } from '@prisma/client'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { OwnerFairPaymentStatus, StallSize } from '@prisma/client';
+import { Type } from 'class-transformer';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { ExhibitorFairPurchaseInstallmentDto } from './exhibitor-fair-purchase-installment.dto';
 
 /**
- * Barraca já vinculada à feira (StallFair + Stall).
+ * Linha de compra (OwnerFairPurchase) para o portal.
+ *
+ * Por que existe:
+ * - No Admin vocês optaram por NÃO agrupar compras.
+ * - O portal consome linha por linha (purchaseId) ao vincular barracas.
  */
-export class ExhibitorFairLinkedStallDto {
+export class ExhibitorFairPurchaseDto {
   @ApiProperty({
-    description: 'ID da barraca.',
-    example: 'ckz8y2w2k0001u9a9abcd1234',
+    example: 'ckx9p3z5p0001q8l1p2abcxyz',
+    description: 'ID da compra.',
   })
   @IsString()
-  stallId: string
-
-  @ApiProperty({
-    description: 'Nome da barraca (PDV).',
-    example: 'Pastel do Zé',
-  })
-  @IsString()
-  pdvName: string
+  id!: string;
 
   @ApiProperty({
     enum: StallSize,
-    description: 'Tamanho da barraca vinculada.',
-    example: 'SIZE_3X3',
+    example: StallSize.SIZE_3X3,
+    description: 'Tamanho comprado.',
   })
   @IsEnum(StallSize)
-  stallSize: StallSize
+  stallSize!: StallSize;
 
   @ApiProperty({
-    description: 'Data/hora (ISO) em que a barraca foi vinculada na feira.',
-    example: '2026-01-29T12:34:56.000Z',
+    example: 1,
+    description: 'Quantidade comprada nesta linha (recomendado = 1).',
   })
-  @IsISO8601()
-  linkedAt: string
+  @IsInt()
+  @Min(1)
+  qty!: number;
+
+  @ApiProperty({
+    example: 0,
+    description: 'Quantidade já consumida por StallFair.',
+  })
+  @IsInt()
+  @Min(0)
+  usedQty!: number;
+
+  @ApiProperty({
+    example: 1,
+    description:
+      'Quantidade restante disponível (derivada: max(0, qty - usedQty)).',
+  })
+  @IsInt()
+  @Min(0)
+  remainingQty!: number;
+
+  @ApiProperty({ example: 150000, description: 'Preço unitário (centavos).' })
+  @IsInt()
+  @Min(0)
+  unitPriceCents!: number;
+
+  @ApiProperty({ example: 150000, description: 'Total (centavos).' })
+  @IsInt()
+  @Min(0)
+  totalCents!: number;
+
+  @ApiProperty({ example: 50000, description: 'Entrada paga (centavos).' })
+  @IsInt()
+  @Min(0)
+  paidCents!: number;
+
+  @ApiProperty({
+    example: 2,
+    description: 'Quantidade de parcelas do restante.',
+  })
+  @IsInt()
+  @Min(0)
+  installmentsCount!: number;
+
+  @ApiProperty({
+    enum: OwnerFairPaymentStatus,
+    example: OwnerFairPaymentStatus.PARTIALLY_PAID,
+    description: 'Status financeiro desta compra.',
+  })
+  @IsEnum(OwnerFairPaymentStatus)
+  status!: OwnerFairPaymentStatus;
+
+  @ApiPropertyOptional({
+    example: 'f0c1b2a3-1234-5678-9abc-000000000000',
+    description:
+      'ID da taxa vinculada a esta compra (OwnerFairPurchase.fairTaxId).',
+  })
+  @IsOptional()
+  @IsString()
+  fairTaxId!: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Taxa padrão',
+    description: 'Nome da taxa (via relation fairTax).',
+  })
+  @IsOptional()
+  @IsString()
+  fairTaxName!: string | null;
+
+  @ApiPropertyOptional({
+    example: 500,
+    description: 'Percentual em BPS (via relation fairTax).',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  fairTaxPercentBps!: number | null;
+
+  @ApiProperty({
+    type: [ExhibitorFairPurchaseInstallmentDto],
+    description: 'Parcelas desta compra.',
+  })
+  @ValidateNested({ each: true })
+  @Type(() => ExhibitorFairPurchaseInstallmentDto)
+  installments!: ExhibitorFairPurchaseInstallmentDto[];
 }

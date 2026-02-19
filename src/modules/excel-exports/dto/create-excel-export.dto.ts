@@ -1,14 +1,38 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 
 /**
  * DTO de geração de exportação Excel.
  *
- * Regras do MVP:
+ * Modelo (para crescer depois):
  * - templateId obrigatório
- * - fairId obrigatório (contexto base)
- * - ownerId opcional (exporta para 1 expositor)
+ * - scope: parâmetros de contexto (fairId hoje é obrigatório)
+ *   - ownerId opcional: exporta só 1 expositor dentro da feira
+ *
+ * No futuro:
+ * - scope pode suportar { ownerId } sem fairId (expositor em várias feiras)
+ * - scope pode suportar { stallId } etc.
  */
+class ExcelExportScopeDto {
+  @ApiProperty({
+    description: 'ID da feira (contexto obrigatório no MVP atual).',
+    example: '2b5a0d6a-3c79-4ab0-9b3d-2b40d2a1f111',
+  })
+  @IsString()
+  @IsUUID()
+  fairId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'ID do expositor (Owner). Se informado, exporta apenas para esse expositor dentro da feira.',
+    example: 'ckx1abcde0001k9qwe1234567',
+  })
+  @IsOptional()
+  @IsString()
+  ownerId?: string;
+}
+
 export class CreateExcelExportDto {
   @ApiProperty({
     description: 'ID do template de Excel.',
@@ -19,19 +43,10 @@ export class CreateExcelExportDto {
   templateId!: string;
 
   @ApiProperty({
-    description: 'ID da feira (contexto obrigatório).',
-    example: '2b5a0d6a-3c79-4ab0-9b3d-2b40d2a1f111',
+    description: 'Escopo da exportação (contexto de dados).',
+    type: ExcelExportScopeDto,
   })
-  @IsString()
-  @IsUUID()
-  fairId!: string;
-
-  @ApiPropertyOptional({
-    description:
-      'ID do expositor (Owner). Se informado, exporta apenas para esse expositor.',
-    example: 'ckx1abcde0001k9qwe1234567',
-  })
-  @IsOptional()
-  @IsString()
-  ownerId?: string;
+  @ValidateNested()
+  @Type(() => ExcelExportScopeDto)
+  scope!: ExcelExportScopeDto;
 }

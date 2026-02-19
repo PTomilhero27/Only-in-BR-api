@@ -20,7 +20,7 @@ import { HealthModule } from './modules/health/health.module';
 import { ExcelTemplatesModule } from './modules/excel-templates/excel-templates.module';
 import { ExcelExportsModule } from './modules/excel-exports/excel-exports.module';
 import { ExcelDatasetsModule } from './modules/excel-datasets/excel-datasets.module';
-
+import { ExcelExportRequirementsModule } from './modules/excel-export-requirements/excel-export-requirements.module';
 
 @Global()
 @Module({
@@ -42,12 +42,10 @@ import { ExcelDatasetsModule } from './modules/excel-datasets/excel-datasets.mod
     PublicInterestsModule,
     ExcelTemplatesModule,
     ExcelExportsModule,
-    ExcelDatasetsModule
+    ExcelDatasetsModule,
+    ExcelExportRequirementsModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-     { provide: APP_GUARD, useClass: JwtAuthGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
 })
 export class AppModule {}

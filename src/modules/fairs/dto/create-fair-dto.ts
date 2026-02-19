@@ -13,6 +13,7 @@ import {
   IsInt,
 } from 'class-validator';
 import { FairStatus } from '@prisma/client';
+import { FairTaxUpsertDto } from './fair-tax.dto';
 
 /**
  * Representa uma janela de funcionamento da feira
@@ -85,12 +86,27 @@ export class CreateFairDto {
   @Type(() => CreateFairOccurrenceDto)
   occurrences!: CreateFairOccurrenceDto[];
 
-
   @ApiProperty({
     example: 120,
     description: 'Capacidade máxima de barracas disponíveis nesta feira.',
   })
   @IsInt()
   @Min(0)
-  stallsCapacity!: number
+  stallsCapacity!: number;
+
+  /**
+   * ✅ Taxas (% sobre vendas) cadastradas no momento da criação.
+   * Regra:
+   * - Podem ser criadas livremente.
+   */
+  @ApiPropertyOptional({
+    type: [FairTaxUpsertDto],
+    description: 'Lista de taxas (% sobre vendas) que a feira terá (opcional).',
+    example: [{ name: 'Taxa padrão', percentBps: 500 }],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FairTaxUpsertDto)
+  taxes?: FairTaxUpsertDto[];
 }

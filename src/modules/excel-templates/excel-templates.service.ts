@@ -1,5 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ExcelCellType, ExcelTemplateStatus } from '@prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  ExcelCellType,
+  ExcelTemplateScope,
+  ExcelTemplateStatus,
+} from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { ExcelDatasetsService } from '../excel-datasets/excel-datasets.service';
@@ -15,6 +23,7 @@ import { ExcelTemplateResponseDto } from './dto/excel-template-response.dto';
  * Este service centraliza a regra de negócio de:
  * - CRUD de templates de Excel (designer)
  * - Validações estruturais (fieldKey, colisões básicas)
+ * - Definição de scope do template (para export dinâmico)
  *
  * Observação:
  * - MVP: PATCH funciona como "replace" do conteúdo do template (sheets/cells/tables).
@@ -37,6 +46,7 @@ export class ExcelTemplatesService {
         id: true,
         name: true,
         status: true,
+        scope: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -67,7 +77,7 @@ export class ExcelTemplatesService {
 
     if (!tpl) throw new NotFoundException('Template não encontrado.');
 
-    return tpl as any;
+    return tpl;
   }
 
   /**
@@ -80,6 +90,7 @@ export class ExcelTemplatesService {
       data: {
         name: dto.name,
         status: dto.status ?? ExcelTemplateStatus.ACTIVE,
+        scope: (dto.scope as ExcelTemplateScope) ?? ExcelTemplateScope.FAIR,
         sheets: {
           create: (dto.sheets ?? []).map((s) => ({
             name: s.name,
@@ -129,18 +140,25 @@ export class ExcelTemplatesService {
       },
     });
 
-    return created as any;
+    return created;
   }
 
   /**
    * Atualiza template.
    *
    * Estratégia MVP:
-   * - Atualiza meta (name/status) se vier
-   * - Se vier "sheets", faz replace total (delete + create)
+   * - Atualiza meta (name/status/scope) se vier
+   * - Se vier "sheets", faz replace total (delete + nested create)
    */
-  async update(id: string, dto: UpdateExcelTemplateDto): Promise<ExcelTemplateResponseDto> {
-    const existing = await this.prisma.excelTemplate.findUnique({ where: { id }, select: { id: true } });
+  async update(
+    id: string,
+    dto: UpdateExcelTemplateDto,
+  ): Promise<ExcelTemplateResponseDto> {
+    const existing = await this.prisma.excelTemplate.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
     if (!existing) throw new NotFoundException('Template não encontrado.');
 
     // Se vier estrutura (sheets), validamos como template completo.
@@ -148,8 +166,9 @@ export class ExcelTemplatesService {
       this.validateTemplatePayload({
         name: dto.name ?? 'template',
         status: dto.status,
-        sheets: dto.sheets as any,
-      });
+        scope: (dto.scope as ExcelTemplateScope) ?? ExcelTemplateScope.FAIR,
+        sheets: dto.sheets,
+      } as CreateExcelTemplateDto);
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -157,8 +176,11 @@ export class ExcelTemplatesService {
       await tx.excelTemplate.update({
         where: { id },
         data: {
-          name: dto.name,
-          status: dto.status,
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.status !== undefined && { status: dto.status }),
+          ...(dto.scope !== undefined && {
+            scope: dto.scope as ExcelTemplateScope,
+          }),
         },
       });
 
@@ -167,68 +189,49 @@ export class ExcelTemplatesService {
         // Apaga sheets (e por cascade apaga cells/tables/columns)
         await tx.excelTemplateSheet.deleteMany({ where: { templateId: id } });
 
-        // Recria sheets
-        await tx.excelTemplateSheet.createMany({
-          data: (dto.sheets ?? []).map((s) => ({
-            templateId: id,
-            name: s.name,
-            order: s.order ?? 0,
-            dataset: s.dataset,
-          })),
-        });
-
-        // Como usamos createMany acima, precisamos buscar ids das sheets recém-criadas.
-        // Para manter o MVP simples e consistente, vamos recriar tudo via tx.excelTemplate.update com nested create.
-        // Portanto, desfazemos a abordagem createMany e partimos pra nested update total abaixo.
-        // (Atenção: este bloco é mantido como referência de intenção; o fluxo real está logo abaixo.)
-        // eslint-disable-next-line no-constant-condition
-        if (true) {
-          // Reaplica: remove e cria de forma aninhada (mais simples e consistente)
-          await tx.excelTemplateSheet.deleteMany({ where: { templateId: id } });
-
-          await tx.excelTemplate.update({
-            where: { id },
-            data: {
-              sheets: {
-                create: (dto.sheets ?? []).map((s) => ({
-                  name: s.name,
-                  order: s.order ?? 0,
-                  dataset: s.dataset,
-                  cells: {
-                    create: (s.cells ?? []).map((c) => ({
-                      row: c.row,
-                      col: c.col,
-                      type: c.type,
-                      value: c.value,
-                      format: c.format ?? null,
-                      bold: c.bold ?? false,
-                    })),
-                  },
-                  tables: {
-                    create: (s.tables ?? []).map((t) => ({
-                      anchorRow: t.anchorRow,
-                      anchorCol: t.anchorCol,
-                      dataset: t.dataset,
-                      includeHeader: t.includeHeader ?? true,
-                      columns: {
-                        create: (t.columns ?? []).map((col, idx) => ({
-                          order: col.order ?? idx,
-                          header: col.header,
-                          fieldKey: col.fieldKey,
-                          format: col.format ?? null,
-                          width: col.width ?? null,
-                        })),
-                      },
-                    })),
-                  },
-                })),
-              },
+        // Recria sheets com nested create (mais simples e consistente)
+        await tx.excelTemplate.update({
+          where: { id },
+          data: {
+            sheets: {
+              create: (dto.sheets ?? []).map((s) => ({
+                name: s.name,
+                order: s.order ?? 0,
+                dataset: s.dataset,
+                cells: {
+                  create: (s.cells ?? []).map((c) => ({
+                    row: c.row,
+                    col: c.col,
+                    type: c.type,
+                    value: c.value,
+                    format: c.format ?? null,
+                    bold: c.bold ?? false,
+                  })),
+                },
+                tables: {
+                  create: (s.tables ?? []).map((t) => ({
+                    anchorRow: t.anchorRow,
+                    anchorCol: t.anchorCol,
+                    dataset: t.dataset,
+                    includeHeader: t.includeHeader ?? true,
+                    columns: {
+                      create: (t.columns ?? []).map((col, idx) => ({
+                        order: col.order ?? idx,
+                        header: col.header,
+                        fieldKey: col.fieldKey,
+                        format: col.format ?? null,
+                        width: col.width ?? null,
+                      })),
+                    },
+                  })),
+                },
+              })),
             },
-          });
-        }
+          },
+        });
       }
 
-      // Retorna completo
+      // 3) Retorna completo
       return tx.excelTemplate.findUnique({
         where: { id },
         include: {
@@ -247,16 +250,19 @@ export class ExcelTemplatesService {
     });
 
     if (!updated) throw new NotFoundException('Template não encontrado.');
-    return updated as any;
+    return updated;
   }
 
   /**
    * Remove template.
    */
   async remove(id: string): Promise<void> {
-    const existing = await this.prisma.excelTemplate.findUnique({ where: { id }, select: { id: true } });
-    if (!existing) throw new NotFoundException('Template não encontrado.');
+    const existing = await this.prisma.excelTemplate.findUnique({
+      where: { id },
+      select: { id: true },
+    });
 
+    if (!existing) throw new NotFoundException('Template não encontrado.');
     await this.prisma.excelTemplate.delete({ where: { id } });
   }
 
@@ -270,15 +276,24 @@ export class ExcelTemplatesService {
    */
   private validateTemplatePayload(dto: CreateExcelTemplateDto): void {
     if (!dto.sheets || dto.sheets.length === 0) {
-      throw new BadRequestException('O template precisa ter pelo menos 1 aba (sheet).');
+      throw new BadRequestException(
+        'O template precisa ter pelo menos 1 aba (sheet).',
+      );
     }
+
+    // 0) valida scope (MVP: apenas garantir enum + coerência básica)
+    // Obs.: validações mais profundas (scope vs datasets) dá pra reforçar depois,
+    // mas já deixamos uma base.
+    this.validateScopeConsistency(dto);
 
     // 1) nomes de sheets únicos
     const sheetNames = new Set<string>();
     for (const s of dto.sheets) {
       const key = s.name.trim().toLowerCase();
       if (sheetNames.has(key)) {
-        throw new BadRequestException(`Nome de aba duplicado no template: "${s.name}".`);
+        throw new BadRequestException(
+          `Nome de aba duplicado no template: "${s.name}".`,
+        );
       }
       sheetNames.add(key);
     }
@@ -318,7 +333,9 @@ export class ExcelTemplatesService {
 
       for (const t of tables) {
         if (!t.columns || t.columns.length === 0) {
-          throw new BadRequestException(`Tabela sem colunas na aba "${sheet.name}".`);
+          throw new BadRequestException(
+            `Tabela sem colunas na aba "${sheet.name}".`,
+          );
         }
 
         // valida fieldKey das colunas
@@ -367,6 +384,40 @@ export class ExcelTemplatesService {
             );
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Valida coerência mínima do scope vs conteúdo.
+   *
+   * MVP (simples):
+   * - FAIR/FAIR_OWNER/FAIR_STALL permitem qualquer dataset, mas normalmente fazem sentido com FAIR_*.
+   * - OWNER e STALL devem, no mínimo, não depender de "fairId" na prática (isso será reforçado no exports).
+   *
+   * O objetivo aqui é evitar templates absurdos logo na criação (sem travar evolução).
+   */
+  private validateScopeConsistency(dto: CreateExcelTemplateDto) {
+    const scope: ExcelTemplateScope =
+      (dto.scope as ExcelTemplateScope) ?? ExcelTemplateScope.FAIR;
+
+    // regra leve: se scope = OWNER ou STALL, evita datasets explicitamente "por feira" (MVP).
+    const allDatasets = (dto.sheets ?? []).map((s) => s.dataset);
+
+    if (scope === ExcelTemplateScope.OWNER) {
+      // permitimos FAIR por enquanto, mas avisamos por erro para manter consistência
+      if (allDatasets.some((d) => String(d).startsWith('FAIR_'))) {
+        throw new BadRequestException(
+          `Scope OWNER não deve usar datasets FAIR_* no MVP. Use scope FAIR_OWNER se o contexto for "expositor dentro de uma feira".`,
+        );
+      }
+    }
+
+    if (scope === ExcelTemplateScope.STALL) {
+      if (allDatasets.some((d) => String(d).startsWith('FAIR_'))) {
+        throw new BadRequestException(
+          `Scope STALL não deve usar datasets FAIR_* no MVP. Use scope FAIR_STALL se o contexto for "barraca dentro de uma feira".`,
+        );
       }
     }
   }

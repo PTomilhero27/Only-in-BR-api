@@ -1,22 +1,23 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 // src/modules/interest-fairs/interest-fairs.service.ts
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common'
-import { PrismaService } from 'src/prisma/prisma.service'
-import type { JwtPayload } from 'src/common/types/jwt-payload.type'
+} from '@nestjs/common';
+import { PrismaService } from 'src/prisma/prisma.service';
+import type { JwtPayload } from 'src/common/types/jwt-payload.type';
 import {
   AuditAction,
   AuditEntity,
   OwnerFairPaymentStatus,
   Prisma,
-  StallSize,
-} from '@prisma/client'
+} from '@prisma/client';
 
-import { LinkInterestToFairDto } from './dto/link-interest-to-fair.dto'
-import { PatchOwnerFairPurchasesDto } from './dto/patch-owner-fair-purchases.dto'
+import { LinkInterestToFairDto } from './dto/link-interest-to-fair.dto';
+import { PatchOwnerFairPurchasesDto } from './dto/patch-owner-fair-purchases.dto';
+import { UpdateStallFairTaxDto } from './dto/update-stall-fair-tax.dto';
 
 /**
  * ✅ InterestFairsService (ADMIN)
@@ -32,13 +33,13 @@ import { PatchOwnerFairPurchasesDto } from './dto/patch-owner-fair-purchases.dto
  */
 @Injectable()
 export class InterestFairsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   // ---------------------------------------------
   // Helpers
   // ---------------------------------------------
   private toAuditJson(value: unknown): Prisma.InputJsonValue {
-    return value as Prisma.InputJsonValue
+    return value as Prisma.InputJsonValue;
   }
 
   /**
@@ -47,17 +48,17 @@ export class InterestFairsService {
    */
   private parseDateOnlyOrThrow(value: string, fieldName: string): Date {
     if (!value || typeof value !== 'string') {
-      throw new BadRequestException(`Informe ${fieldName}.`)
+      throw new BadRequestException(`Informe ${fieldName}.`);
     }
 
-    const iso = `${value}T00:00:00.000Z`
-    const d = new Date(iso)
+    const iso = `${value}T00:00:00.000Z`;
+    const d = new Date(iso);
 
     if (Number.isNaN(d.getTime())) {
-      throw new BadRequestException(`${fieldName} inválido: "${value}".`)
+      throw new BadRequestException(`${fieldName} inválido: "${value}".`);
     }
 
-    return d
+    return d;
   }
 
   /**
@@ -69,29 +70,35 @@ export class InterestFairsService {
    *   - Caso contrário => PENDING
    */
   private computePurchasePaymentStatus(input: {
-    totalCents: number
-    paidCents: number
-    installments: Array<{ dueDate: Date; paidAt: Date | null }>
+    totalCents: number;
+    paidCents: number;
+    installments: Array<{ dueDate: Date; paidAt: Date | null }>;
   }): OwnerFairPaymentStatus {
-    const remaining = Math.max(0, input.totalCents - input.paidCents)
-    if (remaining === 0) return OwnerFairPaymentStatus.PAID
+    const remaining = Math.max(0, input.totalCents - input.paidCents);
+    if (remaining === 0) return OwnerFairPaymentStatus.PAID;
 
-    const total = input.installments.length
-    if (total === 0) return OwnerFairPaymentStatus.PENDING
+    const total = input.installments.length;
+    if (total === 0) return OwnerFairPaymentStatus.PENDING;
 
-    const now = new Date()
-    const paid = input.installments.filter((i) => !!i.paidAt).length
-    const anyOverdue = input.installments.some((i) => !i.paidAt && i.dueDate < now)
+    const now = new Date();
+    const paid = input.installments.filter((i) => !!i.paidAt).length;
+    const anyOverdue = input.installments.some(
+      (i) => !i.paidAt && i.dueDate < now,
+    );
 
     if (paid === 0) {
-      return anyOverdue ? OwnerFairPaymentStatus.OVERDUE : OwnerFairPaymentStatus.PENDING
+      return anyOverdue
+        ? OwnerFairPaymentStatus.OVERDUE
+        : OwnerFairPaymentStatus.PENDING;
     }
 
     if (paid < total) {
-      return anyOverdue ? OwnerFairPaymentStatus.OVERDUE : OwnerFairPaymentStatus.PARTIALLY_PAID
+      return anyOverdue
+        ? OwnerFairPaymentStatus.OVERDUE
+        : OwnerFairPaymentStatus.PARTIALLY_PAID;
     }
 
-    return OwnerFairPaymentStatus.PAID
+    return OwnerFairPaymentStatus.PAID;
   }
 
   /**
@@ -107,48 +114,60 @@ export class InterestFairsService {
    *   - Se remaining > 0  => installmentsCount > 0 e installments obrigatório com soma == remaining
    */
   private validatePurchaseLineOrThrow(input: {
-    unitPriceCents: number
-    paidCents?: number
-    installmentsCount?: number
+    unitPriceCents: number;
+    paidCents?: number;
+    installmentsCount?: number;
     installments?: Array<{
-      number: number
-      dueDate: string
-      amountCents: number
-      paidAt?: string | null
-      paidAmountCents?: number | null
-    }>
+      number: number;
+      dueDate: string;
+      amountCents: number;
+      paidAt?: string | null;
+      paidAmountCents?: number | null;
+    }>;
   }) {
-    const qty = 1
-    const unitPriceCents = Number(input.unitPriceCents)
-    const paidCents = Number(input.paidCents ?? 0)
-    const installmentsCount = Number(input.installmentsCount ?? 0)
+    const qty = 1;
+    const unitPriceCents = Number(input.unitPriceCents);
+    const paidCents = Number(input.paidCents ?? 0);
+    const installmentsCount = Number(input.installmentsCount ?? 0);
 
     if (!Number.isInteger(unitPriceCents) || unitPriceCents < 0) {
-      throw new BadRequestException('unitPriceCents deve ser inteiro >= 0.')
+      throw new BadRequestException('unitPriceCents deve ser inteiro >= 0.');
     }
 
-    const totalCents = qty * unitPriceCents
+    const totalCents = qty * unitPriceCents;
 
     if (!Number.isInteger(paidCents) || paidCents < 0) {
-      throw new BadRequestException('paidCents deve ser inteiro >= 0.')
+      throw new BadRequestException('paidCents deve ser inteiro >= 0.');
     }
     if (paidCents > totalCents) {
-      throw new BadRequestException('paidCents não pode ser maior que o valor da barraca.')
+      throw new BadRequestException(
+        'paidCents não pode ser maior que o valor da barraca.',
+      );
     }
 
-    if (!Number.isInteger(installmentsCount) || installmentsCount < 0 || installmentsCount > 12) {
-      throw new BadRequestException('installmentsCount deve ser inteiro entre 0 e 12.')
+    if (
+      !Number.isInteger(installmentsCount) ||
+      installmentsCount < 0 ||
+      installmentsCount > 12
+    ) {
+      throw new BadRequestException(
+        'installmentsCount deve ser inteiro entre 0 e 12.',
+      );
     }
 
-    const remaining = totalCents - paidCents
+    const remaining = totalCents - paidCents;
 
     // ✅ Sem restante => não pode parcelar
     if (remaining === 0) {
       if (installmentsCount !== 0) {
-        throw new BadRequestException('Sem restante: installmentsCount deve ser 0.')
+        throw new BadRequestException(
+          'Sem restante: installmentsCount deve ser 0.',
+        );
       }
       if (input.installments && input.installments.length > 0) {
-        throw new BadRequestException('Sem restante: installments deve estar vazio.')
+        throw new BadRequestException(
+          'Sem restante: installments deve estar vazio.',
+        );
       }
 
       return {
@@ -158,73 +177,93 @@ export class InterestFairsService {
         paidCents,
         installmentsCount: 0,
         installmentsParsed: [] as Array<{
-          number: number
-          dueDate: Date
-          amountCents: number
-          paidAt: Date | null
-          paidAmountCents: number | null
+          number: number;
+          dueDate: Date;
+          amountCents: number;
+          paidAt: Date | null;
+          paidAmountCents: number | null;
         }>,
         status: OwnerFairPaymentStatus.PAID,
-      }
+      };
     }
 
     // ✅ Tem restante => precisa parcelar
     if (installmentsCount === 0) {
       throw new BadRequestException(
         'Existe valor restante: informe installmentsCount > 0 e a lista de parcelas.',
-      )
+      );
     }
 
-    if (!Array.isArray(input.installments) || input.installments.length !== installmentsCount) {
-      throw new BadRequestException('A lista de parcelas não confere com installmentsCount.')
+    if (
+      !Array.isArray(input.installments) ||
+      input.installments.length !== installmentsCount
+    ) {
+      throw new BadRequestException(
+        'A lista de parcelas não confere com installmentsCount.',
+      );
     }
 
-    const seen = new Set<number>()
-    let sum = 0
+    const seen = new Set<number>();
+    let sum = 0;
 
     const installmentsParsed = input.installments.map((ins) => {
-      const number = Number(ins.number)
-      if (!Number.isInteger(number) || number < 1 || number > installmentsCount) {
-        throw new BadRequestException('Cada parcela deve ter number válido (1..N).')
+      const number = Number(ins.number);
+      if (
+        !Number.isInteger(number) ||
+        number < 1 ||
+        number > installmentsCount
+      ) {
+        throw new BadRequestException(
+          'Cada parcela deve ter number válido (1..N).',
+        );
       }
       if (seen.has(number)) {
-        throw new BadRequestException('Não é permitido repetir number de parcela.')
+        throw new BadRequestException(
+          'Não é permitido repetir number de parcela.',
+        );
       }
-      seen.add(number)
+      seen.add(number);
 
-      const dueDate = this.parseDateOnlyOrThrow(ins.dueDate, 'dueDate')
+      const dueDate = this.parseDateOnlyOrThrow(ins.dueDate, 'dueDate');
 
-      const amountCents = Number(ins.amountCents)
+      const amountCents = Number(ins.amountCents);
       if (!Number.isInteger(amountCents) || amountCents < 0) {
-        throw new BadRequestException('amountCents deve ser inteiro >= 0.')
+        throw new BadRequestException('amountCents deve ser inteiro >= 0.');
       }
-      sum += amountCents
+      sum += amountCents;
 
-      const paidAt = ins.paidAt ? this.parseDateOnlyOrThrow(ins.paidAt, 'paidAt') : null
+      const paidAt = ins.paidAt
+        ? this.parseDateOnlyOrThrow(ins.paidAt, 'paidAt')
+        : null;
 
-      let paidAmountCents: number | null = null
+      let paidAmountCents: number | null = null;
       if (ins.paidAmountCents != null) {
-        const v = Number(ins.paidAmountCents)
+        const v = Number(ins.paidAmountCents);
         if (!Number.isInteger(v) || v < 0) {
-          throw new BadRequestException('paidAmountCents deve ser inteiro >= 0.')
+          throw new BadRequestException(
+            'paidAmountCents deve ser inteiro >= 0.',
+          );
         }
-        paidAmountCents = v
+        paidAmountCents = v;
       }
 
-      return { number, dueDate, amountCents, paidAt, paidAmountCents }
-    })
+      return { number, dueDate, amountCents, paidAt, paidAmountCents };
+    });
 
     if (sum !== remaining) {
       throw new BadRequestException(
         `A soma das parcelas (${sum}) deve ser igual ao restante (${remaining}).`,
-      )
+      );
     }
 
     const status = this.computePurchasePaymentStatus({
       totalCents,
       paidCents,
-      installments: installmentsParsed.map((i) => ({ dueDate: i.dueDate, paidAt: i.paidAt })),
-    })
+      installments: installmentsParsed.map((i) => ({
+        dueDate: i.dueDate,
+        paidAt: i.paidAt,
+      })),
+    });
 
     return {
       qty,
@@ -234,15 +273,17 @@ export class InterestFairsService {
       installmentsCount,
       installmentsParsed,
       status,
-    }
+    };
   }
 
   // ---------------------------------------------
   // List
   // ---------------------------------------------
   async listByOwner(ownerId: string) {
-    const owner = await this.prisma.owner.findUnique({ where: { id: ownerId } })
-    if (!owner) throw new NotFoundException('Interessado não encontrado.')
+    const owner = await this.prisma.owner.findUnique({
+      where: { id: ownerId },
+    });
+    if (!owner) throw new NotFoundException('Interessado não encontrado.');
 
     const links = await this.prisma.ownerFair.findMany({
       where: { ownerId },
@@ -263,15 +304,26 @@ export class InterestFairsService {
           orderBy: { createdAt: 'asc' },
           include: {
             stall: {
-              select: { id: true, pdvName: true, stallSize: true, stallType: true },
+              select: {
+                id: true,
+                pdvName: true,
+                stallSize: true,
+                stallType: true,
+              },
             },
             purchase: {
-              select: { id: true, stallSize: true, unitPriceCents: true, qty: true, usedQty: true },
+              select: {
+                id: true,
+                stallSize: true,
+                unitPriceCents: true,
+                qty: true,
+                usedQty: true,
+              },
             },
           },
         },
       },
-    } as const)
+    } as const);
 
     return {
       ownerId,
@@ -321,7 +373,7 @@ export class InterestFairsService {
           createdAt: sf.createdAt.toISOString(),
         })),
       })),
-    }
+    };
   }
 
   // ---------------------------------------------
@@ -331,34 +383,36 @@ export class InterestFairsService {
     const [owner, fair] = await Promise.all([
       this.prisma.owner.findUnique({ where: { id: ownerId } }),
       this.prisma.fair.findUnique({ where: { id: dto.fairId } }),
-    ])
+    ]);
 
-    if (!owner) throw new NotFoundException('Interessado não encontrado.')
-    if (!fair) throw new NotFoundException('Feira não encontrada.')
+    if (!owner) throw new NotFoundException('Interessado não encontrado.');
+    if (!fair) throw new NotFoundException('Feira não encontrada.');
 
     // ✅ não permite duplicar vínculo
     const existing = await this.prisma.ownerFair.findUnique({
       where: { ownerId_fairId: { ownerId, fairId: dto.fairId } },
       select: { id: true },
-    })
+    });
     if (existing) {
-      throw new ConflictException('Este interessado já está vinculado a esta feira.')
+      throw new ConflictException(
+        'Este interessado já está vinculado a esta feira.',
+      );
     }
 
     // ✅ valida capacidade (se stallsCapacity > 0)
-    const purchasesCount = dto.purchases.length
+    const purchasesCount = dto.purchases.length;
     if (fair.stallsCapacity > 0) {
       const reservedAgg = await this.prisma.ownerFair.aggregate({
         where: { fairId: dto.fairId },
         _sum: { stallsQty: true },
-      })
-      const reserved = reservedAgg._sum.stallsQty ?? 0
-      const wouldReserve = reserved + purchasesCount
+      });
+      const reserved = reservedAgg._sum.stallsQty ?? 0;
+      const wouldReserve = reserved + purchasesCount;
 
       if (wouldReserve > fair.stallsCapacity) {
         throw new BadRequestException(
           `Capacidade excedida: reservado=${wouldReserve}, capacidade=${fair.stallsCapacity}.`,
-        )
+        );
       }
     }
 
@@ -369,13 +423,13 @@ export class InterestFairsService {
         paidCents: p.paidCents,
         installmentsCount: p.installmentsCount,
         installments: p.installments,
-      })
+      });
 
       return {
         stallSize: p.stallSize,
         ...v,
-      }
-    })
+      };
+    });
 
     // ✅ transação: cria OwnerFair + cria purchases + cria installments + auditoria
     const created = await this.prisma.$transaction(async (tx) => {
@@ -385,7 +439,7 @@ export class InterestFairsService {
           fairId: dto.fairId,
           stallsQty: purchasesCount, // fonte de verdade do admin: quantidade comprada
         },
-      })
+      });
 
       // Auditoria do vínculo
       await tx.auditLog.create({
@@ -401,7 +455,7 @@ export class InterestFairsService {
             stallsQty: purchasesCount,
           }),
         },
-      })
+      });
 
       // Cria cada compra como uma linha independente
       for (const p of validated) {
@@ -415,10 +469,11 @@ export class InterestFairsService {
             paidCents: p.paidCents,
             installmentsCount: p.installmentsCount,
             status: p.status,
-            paidAt: p.status === OwnerFairPaymentStatus.PAID ? new Date() : null,
+            paidAt:
+              p.status === OwnerFairPaymentStatus.PAID ? new Date() : null,
             usedQty: 0,
           },
-        })
+        });
 
         // cria parcelas (se houver)
         if (p.installmentsCount > 0) {
@@ -431,7 +486,7 @@ export class InterestFairsService {
               paidAt: ins.paidAt,
               paidAmountCents: ins.paidAmountCents,
             })),
-          })
+          });
         }
 
         // Auditoria da compra (linha)
@@ -457,7 +512,7 @@ export class InterestFairsService {
               fairId: dto.fairId,
             }),
           },
-        })
+        });
       }
 
       // Retorna o vínculo já completo (para o front renderizar imediatamente)
@@ -470,12 +525,12 @@ export class InterestFairsService {
             include: { installments: { orderBy: { number: 'asc' } } },
           },
         },
-      })
+      });
 
-      return full
-    })
+      return full;
+    });
 
-    return created
+    return created;
   }
 
   /**
@@ -503,9 +558,9 @@ export class InterestFairsService {
         contract: { select: { id: true, assinafyDocumentId: true } },
         addendum: { select: { id: true } },
       },
-    })
+    });
 
-    if (!existing) throw new NotFoundException('Vínculo não encontrado.')
+    if (!existing) throw new NotFoundException('Vínculo não encontrado.');
 
     // ✅ snapshot mínimo (auditoria)
     const before = {
@@ -525,11 +580,11 @@ export class InterestFairsService {
       },
       contract: existing.contract
         ? {
-          id: existing.contract.id,
-          assinafyDocumentId: existing.contract.assinafyDocumentId ?? null,
-        }
+            id: existing.contract.id,
+            assinafyDocumentId: existing.contract.assinafyDocumentId ?? null,
+          }
         : null,
-    }
+    };
 
     // ✅ transação para garantir consistência
     await this.prisma.$transaction(async (tx) => {
@@ -537,20 +592,20 @@ export class InterestFairsService {
       if (existing.stallFairs.length > 0) {
         await tx.stallFair.deleteMany({
           where: { ownerFairId: existing.id },
-        })
+        });
       }
 
       // 2) Remove compras (cascade remove parcelas e payments)
       if (existing.ownerFairPurchases.length > 0) {
         await tx.ownerFairPurchase.deleteMany({
           where: { ownerFairId: existing.id },
-        })
+        });
       }
 
       // 3) Remove o vínculo âncora (cascade remove Contract e OwnerFairAddendum)
       await tx.ownerFair.delete({
         where: { id: existing.id },
-      })
+      });
 
       // 4) Auditoria
       await tx.auditLog.create({
@@ -571,23 +626,23 @@ export class InterestFairsService {
             },
           }),
         },
-      })
-    })
+      });
+    });
 
-    return { ok: true }
+    return { ok: true };
   }
 
   /**
- * ✅ PATCH purchases (replace total)
- *
- * Responsabilidade:
- * - Validar vínculo Owner↔Fair
- * - Bloquear se já houve consumo (usedQty > 0 OU existe StallFair)
- * - Apagar todas as compras antigas (cascade nas parcelas)
- * - Recriar compras e parcelas (1 por 1)
- * - Recalcular OwnerFair.stallsQty
- * - Registrar auditoria OWNER_FAIR_PURCHASE
- */
+   * ✅ PATCH purchases (replace total)
+   *
+   * Responsabilidade:
+   * - Validar vínculo Owner↔Fair
+   * - Bloquear se já houve consumo (usedQty > 0 OU existe StallFair)
+   * - Apagar todas as compras antigas (cascade nas parcelas)
+   * - Recriar compras e parcelas (1 por 1)
+   * - Recalcular OwnerFair.stallsQty
+   * - Registrar auditoria OWNER_FAIR_PURCHASE
+   */
 
   async patchPurchasesReplaceTotal(
     ownerId: string,
@@ -605,18 +660,20 @@ export class InterestFairsService {
         },
         stallFairs: { select: { id: true } },
       },
-    })
+    });
 
-    if (!ownerFair) throw new NotFoundException('Vínculo não encontrado.')
+    if (!ownerFair) throw new NotFoundException('Vínculo não encontrado.');
 
     // 2) bloqueio por consumo
-    const anyConsumed = ownerFair.ownerFairPurchases.some((p) => (p.usedQty ?? 0) > 0)
-    const hasStallFairs = (ownerFair.stallFairs?.length ?? 0) > 0
+    const anyConsumed = ownerFair.ownerFairPurchases.some(
+      (p) => (p.usedQty ?? 0) > 0,
+    );
+    const hasStallFairs = (ownerFair.stallFairs?.length ?? 0) > 0;
 
     if (anyConsumed || hasStallFairs) {
       throw new ConflictException(
         'Não é possível editar compras após vincular barracas à feira (consumo detectado).',
-      )
+      );
     }
 
     // 3) snapshot "before" para auditoria
@@ -641,38 +698,48 @@ export class InterestFairsService {
           paidAmountCents: i.paidAmountCents ?? null,
         })),
       })),
-    }
+    };
 
     // 4) validações de negócio (por linha)
     // Decisão: 1 por 1 => qty = 1 sempre.
     const normalized = dto.purchases.map((line, idx) => {
-      const unitPriceCents = Number(line.unitPriceCents ?? 0)
-      const paidCents = Number(line.paidCents ?? 0)
-      const count = Number(line.installmentsCount ?? 0)
+      const unitPriceCents = Number(line.unitPriceCents ?? 0);
+      const paidCents = Number(line.paidCents ?? 0);
+      const count = Number(line.installmentsCount ?? 0);
 
       if (!Number.isInteger(unitPriceCents) || unitPriceCents < 0) {
-        throw new BadRequestException(`Linha ${idx + 1}: unitPriceCents inválido.`)
+        throw new BadRequestException(
+          `Linha ${idx + 1}: unitPriceCents inválido.`,
+        );
       }
       if (!Number.isInteger(paidCents) || paidCents < 0) {
-        throw new BadRequestException(`Linha ${idx + 1}: paidCents inválido.`)
+        throw new BadRequestException(`Linha ${idx + 1}: paidCents inválido.`);
       }
       if (paidCents > unitPriceCents) {
-        throw new BadRequestException(`Linha ${idx + 1}: paidCents não pode ser maior que unitPriceCents.`)
+        throw new BadRequestException(
+          `Linha ${idx + 1}: paidCents não pode ser maior que unitPriceCents.`,
+        );
       }
       if (!Number.isInteger(count) || count < 0 || count > 12) {
-        throw new BadRequestException(`Linha ${idx + 1}: installmentsCount deve ser entre 0 e 12.`)
+        throw new BadRequestException(
+          `Linha ${idx + 1}: installmentsCount deve ser entre 0 e 12.`,
+        );
       }
 
-      const totalCents = unitPriceCents // qty=1
-      const remaining = totalCents - paidCents
+      const totalCents = unitPriceCents; // qty=1
+      const remaining = totalCents - paidCents;
 
       // Se quitou => não pode ter parcelas
       if (remaining === 0) {
         if (count !== 0) {
-          throw new BadRequestException(`Linha ${idx + 1}: sem restante => installmentsCount deve ser 0.`)
+          throw new BadRequestException(
+            `Linha ${idx + 1}: sem restante => installmentsCount deve ser 0.`,
+          );
         }
         if (line.installments?.length) {
-          throw new BadRequestException(`Linha ${idx + 1}: sem restante => installments deve estar vazio.`)
+          throw new BadRequestException(
+            `Linha ${idx + 1}: sem restante => installments deve estar vazio.`,
+          );
         }
         return {
           stallSize: line.stallSize,
@@ -682,50 +749,64 @@ export class InterestFairsService {
           installmentsCount: 0,
           installments: [],
           status: OwnerFairPaymentStatus.PAID,
-        }
+        };
       }
 
       // Se falta pagar => precisa parcelamento (por enquanto)
       if (count === 0) {
         throw new BadRequestException(
           `Linha ${idx + 1}: existe restante (${remaining}) => informe installmentsCount > 0 e a lista de parcelas.`,
-        )
+        );
       }
 
-      if (!Array.isArray(line.installments) || line.installments.length !== count) {
-        throw new BadRequestException(`Linha ${idx + 1}: installments não confere com installmentsCount.`)
+      if (
+        !Array.isArray(line.installments) ||
+        line.installments.length !== count
+      ) {
+        throw new BadRequestException(
+          `Linha ${idx + 1}: installments não confere com installmentsCount.`,
+        );
       }
 
       // valida soma parcelas == restante e numbers únicos 1..N
-      const seen = new Set<number>()
-      let sum = 0
+      const seen = new Set<number>();
+      let sum = 0;
 
       const installmentsParsed = line.installments.map((ins) => {
-        const number = Number(ins.number)
+        const number = Number(ins.number);
         if (!Number.isInteger(number) || number < 1 || number > count) {
-          throw new BadRequestException(`Linha ${idx + 1}: parcela number inválido (1..${count}).`)
+          throw new BadRequestException(
+            `Linha ${idx + 1}: parcela number inválido (1..${count}).`,
+          );
         }
         if (seen.has(number)) {
-          throw new BadRequestException(`Linha ${idx + 1}: parcela number repetido (${number}).`)
+          throw new BadRequestException(
+            `Linha ${idx + 1}: parcela number repetido (${number}).`,
+          );
         }
-        seen.add(number)
+        seen.add(number);
 
-        const dueDate = this.parseDateOnlyOrThrow(ins.dueDate, `Linha ${idx + 1}: dueDate`)
-        const amountCents = Number(ins.amountCents)
+        const dueDate = this.parseDateOnlyOrThrow(
+          ins.dueDate,
+          `Linha ${idx + 1}: dueDate`,
+        );
+        const amountCents = Number(ins.amountCents);
 
         if (!Number.isInteger(amountCents) || amountCents < 0) {
-          throw new BadRequestException(`Linha ${idx + 1}: amountCents inválido.`)
+          throw new BadRequestException(
+            `Linha ${idx + 1}: amountCents inválido.`,
+          );
         }
 
-        sum += amountCents
+        sum += amountCents;
 
-        return { number, dueDate, amountCents }
-      })
+        return { number, dueDate, amountCents };
+      });
 
       if (sum !== remaining) {
         throw new BadRequestException(
           `Linha ${idx + 1}: soma das parcelas (${sum}) deve ser igual ao restante (${remaining}).`,
-        )
+        );
       }
 
       // status inicial (sem paidAt em parcelas no admin, mas já deixa coerente)
@@ -736,7 +817,7 @@ export class InterestFairsService {
           dueDate: i.dueDate,
           paidAt: null,
         })),
-      })
+      });
 
       return {
         stallSize: line.stallSize,
@@ -746,22 +827,22 @@ export class InterestFairsService {
         installmentsCount: count,
         installments: installmentsParsed,
         status,
-      }
-    })
+      };
+    });
 
     // 5) transação: delete tudo e recria
     const result = await this.prisma.$transaction(async (tx) => {
       // apaga compras antigas (cascade apaga installments)
       await tx.ownerFairPurchase.deleteMany({
         where: { ownerFairId: ownerFair.id },
-      })
+      });
 
       // recria compras (1 por 1)
       for (const p of normalized) {
         await tx.ownerFairPurchase.create({
           data: {
             ownerFairId: ownerFair.id,
-            stallSize: p.stallSize as StallSize,
+            stallSize: p.stallSize,
             qty: 1, // ✅ 1 por 1
             unitPriceCents: p.unitPriceCents,
             totalCents: p.totalCents,
@@ -773,27 +854,27 @@ export class InterestFairsService {
               create:
                 p.installmentsCount > 0
                   ? p.installments.map((i) => ({
-                    number: i.number,
-                    dueDate: i.dueDate,
-                    amountCents: i.amountCents,
-                  }))
+                      number: i.number,
+                      dueDate: i.dueDate,
+                      amountCents: i.amountCents,
+                    }))
                   : [],
             },
           },
-        })
+        });
       }
 
       // atualiza stallsQty (quantidade comprada = número de linhas)
-      const stallsQty = normalized.length
+      const stallsQty = normalized.length;
 
       const updatedOwnerFair = await tx.ownerFair.update({
         where: { id: ownerFair.id },
         data: { stallsQty },
         select: { id: true, stallsQty: true, ownerId: true, fairId: true },
-      })
+      });
 
-      return updatedOwnerFair
-    })
+      return updatedOwnerFair;
+    });
 
     // 6) auditoria (before/after)
     const afterSnapshot = {
@@ -815,7 +896,7 @@ export class InterestFairsService {
           amountCents: i.amountCents,
         })),
       })),
-    }
+    };
 
     await this.prisma.auditLog.create({
       data: {
@@ -832,12 +913,115 @@ export class InterestFairsService {
           mode: 'replace_total',
         }),
       },
-    })
+    });
 
     return {
       ok: true,
       ownerFairId: result.id,
       stallsQty: result.stallsQty,
+    };
+  }
+
+  async updateStallFairTax(
+    ownerId: string,
+    fairId: string,
+    stallFairId: string,
+    dto: UpdateStallFairTaxDto,
+    actor: JwtPayload,
+  ) {
+    // 1) Carrega o StallFair garantindo que pertence ao owner/fair
+    const stallFair = await this.prisma.stallFair.findFirst({
+      where: {
+        id: stallFairId,
+        fairId,
+        ownerFair: { ownerId, fairId },
+      },
+      include: {
+        ownerFair: { select: { id: true, ownerId: true, fairId: true } },
+      },
+    });
+
+    if (!stallFair) {
+      throw new NotFoundException(
+        'Barraca vinculada (StallFair) não encontrada para este expositor/feira.',
+      );
     }
+
+    // 2) Valida a taxa (precisa ser uma taxa da própria feira)
+    const tax = await this.prisma.fairTax.findUnique({
+      where: { id: dto.taxId },
+      select: {
+        id: true,
+        fairId: true,
+        name: true,
+        percentBps: true,
+        isActive: true,
+      },
+    });
+
+    if (!tax) throw new NotFoundException('Taxa não encontrada.');
+    if (tax.fairId !== fairId) {
+      throw new BadRequestException(
+        'A taxa informada não pertence a esta feira.',
+      );
+    }
+    if (!tax.isActive) {
+      throw new BadRequestException(
+        'Não é permitido aplicar uma taxa inativa.',
+      );
+    }
+
+    // 3) Auditoria: before snapshot mínimo
+    const before = {
+      stallFairId: stallFair.id,
+      fairId: stallFair.fairId,
+      ownerFairId: stallFair.ownerFairId,
+      taxId: stallFair.taxId ?? null,
+      taxNameSnapshot: stallFair.taxNameSnapshot ?? null,
+      taxPercentBpsSnapshot: stallFair.taxPercentBpsSnapshot ?? null,
+    };
+
+    // 4) Atualiza o StallFair com taxa + snapshot (transação por consistência + audit)
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const sf = await tx.stallFair.update({
+        where: { id: stallFair.id },
+        data: {
+          taxId: tax.id,
+          taxNameSnapshot: tax.name,
+          taxPercentBpsSnapshot: tax.percentBps,
+        },
+        select: {
+          id: true,
+          fairId: true,
+          ownerFairId: true,
+          stallId: true,
+          taxId: true,
+          taxNameSnapshot: true,
+          taxPercentBpsSnapshot: true,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: AuditAction.UPDATE,
+          entity: AuditEntity.STALL_FAIR,
+          entityId: stallFair.id,
+          actorUserId: actor.id,
+          before: this.toAuditJson(before),
+          after: this.toAuditJson({
+            ...sf,
+          }),
+          meta: this.toAuditJson({
+            ownerId,
+            fairId,
+            reason: 'set_stall_fair_tax',
+          }),
+        },
+      });
+
+      return sf;
+    });
+
+    return { ok: true, item: updated };
   }
 }

@@ -1,4 +1,13 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -6,26 +15,26 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
-} from '@nestjs/swagger'
-import { FairStatus } from '@prisma/client'
+} from '@nestjs/swagger';
+import { FairStatus } from '@prisma/client';
 
-import { FairsService } from './fairs.service'
-import { CreateFairDto } from './dto/create-fair-dto'
-import { UpdateFairDto } from './dto/update-fair-dto'
-import { ListFairsDto } from './dto/list-fair-dto'
+import { FairsService } from './fairs.service';
+import { CreateFairDto } from './dto/create-fair-dto';
+import { UpdateFairDto } from './dto/update-fair-dto';
+import { ListFairsDto } from './dto/list-fair-dto';
 
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import type { JwtPayload } from 'src/common/types/jwt-payload.type'
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from 'src/common/types/jwt-payload.type';
 
-import { UpdateExhibitorStatusDto } from './dto/exhibitors/update-exhibitor-status.dto'
-import { FairExhibitorsResponseDto } from './dto/exhibitors/fair-exhibitors.dto'
+import { UpdateExhibitorStatusDto } from './dto/exhibitors/update-exhibitor-status.dto';
+import { FairExhibitorsResponseDto } from './dto/exhibitors/fair-exhibitors.dto';
 
-import { SettleInstallmentsResponseDto } from './dto/exhibitors/settle-installments-response.dto'
-import { SettleStallInstallmentsDto } from './dto/exhibitors/settle-stall-installments.dto'
-import { RescheduleInstallmentDto } from './dto/exhibitors/reschedule-installment.dto'
-import { CreateInstallmentPaymentDto } from './dto/exhibitors/create-installment-payment.dto'
-import { InstallmentPaymentActionResponseDto } from './dto/exhibitors/installment-payment-action-response.dto'
-import { UpdateOwnerFairObservationsDto } from './dto/exhibitors/update-ownerfair-observations.dto'
+import { SettleInstallmentsResponseDto } from './dto/exhibitors/settle-installments-response.dto';
+import { SettleStallInstallmentsDto } from './dto/exhibitors/settle-stall-installments.dto';
+import { RescheduleInstallmentDto } from './dto/exhibitors/reschedule-installment.dto';
+import { CreateInstallmentPaymentDto } from './dto/exhibitors/create-installment-payment.dto';
+import { InstallmentPaymentActionResponseDto } from './dto/exhibitors/installment-payment-action-response.dto';
+import { UpdateOwnerFairObservationsDto } from './dto/exhibitors/update-ownerfair-observations.dto';
 
 /**
  * Controller de Feiras.
@@ -53,7 +62,7 @@ export class FairsController {
   @ApiOperation({ summary: 'Criar feira' })
   @ApiCreatedResponse({ description: 'Feira criada com sucesso.' })
   create(@Body() dto: CreateFairDto, @CurrentUser() user: JwtPayload) {
-    return this.fairsService.create(dto, user.id)
+    return this.fairsService.create(dto, user.id);
   }
 
   @HttpCode(200)
@@ -64,7 +73,7 @@ export class FairsController {
     @Body() dto: UpdateFairDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.fairsService.update(id, dto, user.id)
+    return this.fairsService.update(id, dto, user.id);
   }
 
   @HttpCode(200)
@@ -72,7 +81,7 @@ export class FairsController {
   @ApiOperation({ summary: 'Listar feiras' })
   @ApiQuery({ name: 'status', required: false, enum: FairStatus })
   list(@Query() query: ListFairsDto) {
-    return this.fairsService.list(query)
+    return this.fairsService.list(query);
   }
 
   // ---------------------------------------------------------
@@ -86,7 +95,7 @@ export class FairsController {
   })
   @ApiOkResponse({ type: FairExhibitorsResponseDto })
   listExhibitors(@Param('id') fairId: string) {
-    return this.fairsService.listExhibitorsWithStalls(fairId)
+    return this.fairsService.listExhibitorsWithStalls(fairId);
   }
 
   @Patch(':fairId/exhibitors/:ownerId/status')
@@ -98,7 +107,12 @@ export class FairsController {
     @Body() dto: UpdateExhibitorStatusDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.fairsService.updateExhibitorStatus(fairId, ownerId, dto, user.id)
+    return this.fairsService.updateExhibitorStatus(
+      fairId,
+      ownerId,
+      dto,
+      user.id,
+    );
   }
 
   // ---------------------------------------------------------
@@ -118,10 +132,17 @@ export class FairsController {
     @Body() dto: SettleStallInstallmentsDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.fairsService.settleStallInstallments(fairId, ownerId, dto, user.id)
+    return this.fairsService.settleStallInstallments(
+      fairId,
+      ownerId,
+      dto,
+      user.id,
+    );
   }
 
-  @Patch(':fairId/exhibitors/:ownerId/purchases/:purchaseId/installments/:number/reschedule')
+  @Patch(
+    ':fairId/exhibitors/:ownerId/purchases/:purchaseId/installments/:number/reschedule',
+  )
   @ApiOperation({
     summary: 'Reprogramar vencimento de uma parcela (negociação).',
   })
@@ -142,12 +163,15 @@ export class FairsController {
       Number(number),
       dto,
       user.id,
-    )
+    );
   }
 
-  @Post(':fairId/exhibitors/:ownerId/purchases/:purchaseId/installments/:number/payments')
+  @Post(
+    ':fairId/exhibitors/:ownerId/purchases/:purchaseId/installments/:number/payments',
+  )
   @ApiOperation({
-    summary: 'Registrar pagamento (histórico) em uma parcela (suporta parcial).',
+    summary:
+      'Registrar pagamento (histórico) em uma parcela (suporta parcial).',
   })
   @ApiCreatedResponse({ type: InstallmentPaymentActionResponseDto })
   @HttpCode(201)
@@ -166,18 +190,18 @@ export class FairsController {
       Number(number),
       dto,
       user.id,
-    )
+    );
   }
 
-
-    /**
+  /**
    * Atualiza as observações internas do admin para um expositor (Owner) dentro de uma feira.
    * Observação: estamos ancorando pelo par (fairId, ownerId) para evitar o client precisar do ownerFairId.
    */
   @Patch(':fairId/exhibitors/:ownerId/observations')
   @ApiOperation({
     summary: 'Atualizar observações do expositor na feira',
-    description: 'Permite ao admin salvar observações no vínculo Owner ↔ Fair (OwnerFair).',
+    description:
+      'Permite ao admin salvar observações no vínculo Owner ↔ Fair (OwnerFair).',
   })
   updateExhibitorObservations(
     @Param('fairId') fairId: string,

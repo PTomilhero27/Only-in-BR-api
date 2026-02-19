@@ -1,21 +1,28 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ExcelDataset, ExcelTemplateStatus } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { ExcelGeneratorService } from '../../excel/excel-generator.service';
 import { ExcelContext } from '../../excel/types/excel-context.type';
-
 import { ExcelDatasetsService } from '../excel-datasets/excel-datasets.service';
 import { CreateExcelExportDto } from './dto/create-excel-export.dto';
 
 /**
  * ✅ ExcelExportsService
  *
- * Este service centraliza a regra de negócio de exportação:
- * - Carregar o template (com sheets/cells/tables/columns)
- * - Carregar os dados do banco (fair + expositores + barracas)
- * - Montar o contexto do gerador (ctx.root + ctx.lists)
- * - Delegar a geração para o ExcelGeneratorService (core)
+ * Responsabilidade:
+ * - Carregar template (sheets/cells/tables/columns)
+ * - Carregar dados do banco conforme scope
+ * - Montar ctx.root + ctx.lists
+ * - Delegar pro ExcelGeneratorService
+ *
+ * MVP atual:
+ * - Tudo é "por feira", então scope.fairId é obrigatório
+ * - ownerId é opcional: exporta apenas 1 expositor dentro da feira
  */
 @Injectable()
 export class ExcelExportsService {
@@ -25,17 +32,20 @@ export class ExcelExportsService {
     private readonly excelDatasets: ExcelDatasetsService, // ✅ registry oficial
   ) {}
 
-  /**
-   * Gera o arquivo .xlsx em memória (Buffer).
-   * O controller será responsável por stream/download.
-   */
   async generate(dto: CreateExcelExportDto): Promise<{
     filename: string;
     buffer: Buffer;
   }> {
-    // 1) Carrega template completo
+    const { templateId, scope } = dto;
+    const { fairId, ownerId } = scope;
+
+    if (!fairId) {
+      throw new BadRequestException('scope.fairId é obrigatório no MVP.');
+    }
+
+    // 1) Template completo
     const template = await this.prisma.excelTemplate.findUnique({
-      where: { id: dto.templateId },
+      where: { id: templateId },
       include: {
         sheets: {
           orderBy: { order: 'asc' },
@@ -52,30 +62,30 @@ export class ExcelExportsService {
 
     if (!template) throw new NotFoundException('Template não encontrado.');
     if (template.status !== ExcelTemplateStatus.ACTIVE) {
-      throw new BadRequestException('Template está INATIVO e não pode ser exportado.');
+      throw new BadRequestException(
+        'Template está INATIVO e não pode ser exportado.',
+      );
     }
 
-    // 2) Carrega feira (inclui contagens simples)
+    // 2) Feira base
     const fair = await this.prisma.fair.findUnique({
-      where: { id: dto.fairId },
+      where: { id: fairId },
       select: {
         id: true,
         name: true,
         status: true,
         address: true,
         stallsCapacity: true,
-        ownerFairs: { select: { id: true } },
-        stallFairs: { select: { id: true } },
       },
     });
 
     if (!fair) throw new NotFoundException('Feira não encontrada.');
 
-    // 3) Expositores da feira (OwnerFair + Owner + Purchases)
+    // 3) Expositores (OwnerFair + Owner + Purchases + Installments)
     const ownerFairs = await this.prisma.ownerFair.findMany({
       where: {
-        fairId: dto.fairId,
-        ...(dto.ownerId ? { ownerId: dto.ownerId } : {}),
+        fairId,
+        ...(ownerId ? { ownerId } : {}),
       },
       include: {
         owner: true,
@@ -86,11 +96,11 @@ export class ExcelExportsService {
       orderBy: { createdAt: 'asc' },
     });
 
-    // 4) Barracas vinculadas na feira (StallFair + Stall + OwnerFair + Owner + Purchase)
+    // 4) Barracas da feira (StallFair + Stall + OwnerFair + Owner + Purchase)
     const stallFairs = await this.prisma.stallFair.findMany({
       where: {
-        fairId: dto.fairId,
-        ...(dto.ownerId ? { ownerFair: { ownerId: dto.ownerId } } : {}),
+        fairId,
+        ...(ownerId ? { ownerFair: { ownerId } } : {}),
       },
       include: {
         stall: true,
@@ -100,11 +110,19 @@ export class ExcelExportsService {
       orderBy: { createdAt: 'asc' },
     });
 
-    // 5) Monta contexto do Excel (root + lists)
-    // MVP: reservadas = quantidade de vínculos OwnerFair (pode evoluir para soma de stallsQty)
-    const stallsReserved = fair.ownerFairs.length;
-    const stallsLinked = fair.stallFairs.length;
-    const stallsRemaining = Math.max(0, fair.stallsCapacity - stallsLinked);
+    // 5) Monta ctx (root + lists)
+
+    // ✅ Reservadas = soma de stallsQty (quantidade comprada/reservada por expositor)
+    const stallsReserved = ownerFairs.reduce(
+      (acc, of) => acc + (of.stallsQty ?? 0),
+      0,
+    );
+
+    // ✅ Vinculadas = quantidade real de StallFair criadas
+    const stallsLinked = stallFairs.length;
+
+    // ✅ Disponíveis (pela semântica "reservadas/disponíveis") = capacity - reserved
+    const stallsRemaining = Math.max(0, fair.stallsCapacity - stallsReserved);
 
     const ctx: ExcelContext = {
       root: {
@@ -116,15 +134,24 @@ export class ExcelExportsService {
           stallsCapacity: fair.stallsCapacity,
           stallsReserved,
           stallsRemaining,
+          // opcional se você quiser usar em templates:
+          stallsLinked,
         },
         generatedAt: new Date(),
       },
       lists: {
-        [ExcelDataset.FAIR_EXHIBITORS]: ownerFairs.map((of) => {
-          const totalCents = of.ownerFairPurchases.reduce((acc, p) => acc + p.totalCents, 0);
-          const paidCents = of.ownerFairPurchases.reduce((acc, p) => acc + p.paidCents, 0);
+        // ✅ Enum correto do seu Prisma: FAIR_EXHIBITORS_LIST
+        [ExcelDataset.FAIR_EXHIBITORS_LIST]: ownerFairs.map((of) => {
+          const totalCents = of.ownerFairPurchases.reduce(
+            (acc, p) => acc + p.totalCents,
+            0,
+          );
 
-          // MVP: status simples do pagamento
+          const paidCents = of.ownerFairPurchases.reduce(
+            (acc, p) => acc + p.paidCents,
+            0,
+          );
+
           const paymentStatus =
             totalCents === 0
               ? 'N/A'
@@ -144,24 +171,35 @@ export class ExcelExportsService {
             },
             ownerFair: {
               status: of.status,
+              stallsQty: of.stallsQty, // ✅ útil no Excel
+              contractSignedAt: of.contractSignedAt, // ✅ existe no Prisma
               observations: of.observations,
             },
-            payment: {
+            // ✅ seu catálogo novo recomenda "financial.*"
+            financial: {
               status: paymentStatus,
               totalCents,
               paidCents,
+              pendingCents: Math.max(0, totalCents - paidCents),
             },
           };
         }),
 
-        [ExcelDataset.FAIR_STALLS]: stallFairs.map((sf) => ({
+        // ✅ Enum correto do seu Prisma: FAIR_STALLS_LIST
+        [ExcelDataset.FAIR_STALLS_LIST]: stallFairs.map((sf) => ({
           stall: {
             id: sf.stall.id,
             pdvName: sf.stall.pdvName,
+            bannerName: sf.stall.bannerName,
+            mainCategory: sf.stall.mainCategory,
             stallType: sf.stall.stallType,
             stallSize: sf.stall.stallSize,
             machinesQty: sf.stall.machinesQty,
             teamQty: sf.stall.teamQty,
+
+            // ⚠️ needsGas não existe direto no Stall no Prisma.
+            // Se você quiser, inclua powerNeed no include do stallFair (stall: { include: { powerNeed: true } })
+            // e monte aqui como powerNeed.needsGas.
           },
           owner: {
             id: sf.ownerFair.owner.id,
@@ -174,19 +212,26 @@ export class ExcelExportsService {
             paidCents: sf.purchase.paidCents,
             status: sf.purchase.status,
           },
+          // opcional se quiser usar no Excel:
+          stallFair: {
+            id: sf.id,
+            createdAt: sf.createdAt,
+          },
         })),
       },
     };
 
-    // 6) Delega ao core (✅ assinatura correta: 1 argumento com params)
+    // 6) Gera buffer
     const buffer = await this.excelGenerator.generateXlsxBuffer({
-      template: template as any,
+      template,
       ctx,
       registry: this.excelDatasets,
     });
 
     const safeName = fair.name.replace(/[^\w\d-]+/g, '-').slice(0, 40);
-    const filename = dto.ownerId ? `export-${safeName}-owner.xlsx` : `export-${safeName}.xlsx`;
+    const filename = ownerId
+      ? `export-${safeName}-owner.xlsx`
+      : `export-${safeName}.xlsx`;
 
     return { filename, buffer };
   }

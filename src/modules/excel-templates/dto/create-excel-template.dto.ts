@@ -12,7 +12,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ExcelCellType, ExcelDataset, ExcelTemplateStatus, ExcelValueFormat } from '@prisma/client';
+import {
+  ExcelCellType,
+  ExcelDataset,
+  ExcelTemplateStatus,
+  ExcelValueFormat,
+  ExcelTemplateScope,
+} from '@prisma/client';
 
 /**
  * DTO de criação de template de Excel.
@@ -35,6 +41,16 @@ export class CreateExcelTemplateDto {
   @IsOptional()
   @IsEnum(ExcelTemplateStatus)
   status?: ExcelTemplateStatus;
+
+  @ApiPropertyOptional({
+    description:
+      'Scope do template para export (ex.: FAIR, OWNER, STALL, FAIR_OWNER, FAIR_STALL).',
+    enum: ExcelTemplateScope,
+    example: ExcelTemplateScope.FAIR,
+  })
+  @IsOptional()
+  @IsEnum(ExcelTemplateScope)
+  scope?: ExcelTemplateScope;
 
   @ApiProperty({
     description: 'Abas (sheets) do template.',
@@ -68,7 +84,7 @@ export class ExcelTemplateSheetInputDto {
   @ApiProperty({
     description: 'Dataset base/contexto da aba (para validação de BINDs).',
     enum: ExcelDataset,
-    example: ExcelDataset.FAIR,
+    example: ExcelDataset.FAIR_SUMMARY, // ✅ existe no seu Prisma
   })
   @IsEnum(ExcelDataset)
   dataset!: ExcelDataset;
@@ -109,7 +125,11 @@ export class ExcelTemplateCellInputDto {
   @Max(16_384)
   col!: number;
 
-  @ApiProperty({ description: 'Tipo da célula.', enum: ExcelCellType, example: ExcelCellType.TEXT })
+  @ApiProperty({
+    description: 'Tipo da célula.',
+    enum: ExcelCellType,
+    example: ExcelCellType.TEXT,
+  })
   @IsEnum(ExcelCellType)
   type!: ExcelCellType;
 
@@ -123,7 +143,8 @@ export class ExcelTemplateCellInputDto {
   value!: string;
 
   @ApiPropertyOptional({
-    description: 'Formato opcional do valor (se não informado, pode vir do catálogo).',
+    description:
+      'Formato opcional do valor (se não informado, pode vir do catálogo).',
     enum: ExcelValueFormat,
     example: ExcelValueFormat.TEXT,
   })
@@ -153,7 +174,7 @@ export class ExcelTemplateTableInputDto {
   @ApiProperty({
     description: 'Dataset que a tabela lista.',
     enum: ExcelDataset,
-    example: ExcelDataset.FAIR_EXHIBITORS,
+    example: ExcelDataset.FAIR_EXHIBITORS_LIST, // ✅ existe no seu Prisma
   })
   @IsEnum(ExcelDataset)
   dataset!: ExcelDataset;

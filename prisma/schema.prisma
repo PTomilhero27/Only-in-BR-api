@@ -16,12 +16,14 @@ enum StallSize {
   SIZE_3X3
   SIZE_3X6
   TRAILER
+  CART // ✅ novo
 }
 
 enum StallType {
   OPEN
   CLOSED
   TRAILER
+  CART // ✅ novo
 }
 
 enum UserRole {
@@ -55,8 +57,6 @@ enum AuditAction {
 enum AuditEntity {
   FAIR
   USER
-  FORM
-  FAIR_FORM
   CONTRACT
   PAYMENT
   OWNER_FAIR
@@ -123,10 +123,29 @@ enum ExcelValueFormat {
 }
 
 enum ExcelDataset {
+  // SINGLE
+  FAIR_INFO
+  FAIR_SUMMARY
+  OWNER_INFO
+  OWNER_SUMMARY
+  STALL_INFO
+  STALL_SUMMARY
+
+  // MULTI
+  FAIR_EXHIBITORS_LIST
+  FAIR_STALLS_LIST
+  FAIR_PURCHASES_LIST
+  OWNER_FAIRS_LIST
+  OWNER_STALLS_LIST
+  STALL_FAIRS_LIST
+}
+
+enum ExcelTemplateScope {
   FAIR
-  FAIR_EXHIBITORS
-  FAIR_STALLS
-  FAIR_FINANCIAL
+  FAIR_OWNER
+  FAIR_STALL
+  OWNER
+  STALL
 }
 
 model User {
@@ -260,11 +279,6 @@ model Fair {
   ownerFairs OwnerFair[]
 
   /**
-   * Vínculos desta feira com formulários.
-   */
-  fairForms FairForm[]
-
-  /**
    * Barracas vinculadas a esta feira.
    * Importante:
    * - Agora StallFair é a unidade de "compra/pagamento" por barraca.
@@ -276,10 +290,41 @@ model Fair {
    */
   contractSettings FairContractSettings?
 
+  taxes FairTax[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([createdByUserId])
+}
+
+model FairTax {
+  id String @id @default(uuid())
+
+  fairId String
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Nome da taxa.
+   * Ex: "Taxa padrão", "Taxa carrinho", etc.
+   */
+  name String
+
+  /**
+   * Percentual em basis points.
+   * 500 = 5.00%
+   */
+  percentBps Int
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchases  OwnerFairPurchase[]
+  stallFairs StallFair[]
+
+  @@index([fairId])
 }
 
 model FairOccurrence {
@@ -294,62 +339,6 @@ model FairOccurrence {
   @@unique([fairId, startsAt, endsAt])
   @@index([fairId, startsAt])
   @@index([startsAt, endsAt])
-}
-
-model Form {
-  id String @id @default(cuid())
-
-  /**
-   * Identificador lógico do formulário.
-   * Ex.: "stalls", "interests", "contracts"
-   */
-  slug String @unique
-
-  /**
-   * Nome exibido no painel admin.
-   */
-  name String
-
-  /**
-   * Permite desativar o form globalmente.
-   */
-  active Boolean @default(true)
-
-  /**
-   * Vínculos deste formulário com feiras.
-   */
-  fairForms FairForm[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model FairForm {
-  id String @id @default(cuid())
-
-  fairId String
-  formId String
-
-  /**
-   * Ativa/desativa rapidamente o form para esta feira.
-   */
-  enabled Boolean @default(false)
-
-  /**
-   * Janela de liberação do formulário.
-   */
-  startsAt DateTime
-  endsAt   DateTime
-
-  fair Fair @relation(fields: [fairId], references: [id], onDelete: Cascade)
-  form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([fairId, formId])
-  @@index([fairId])
-  @@index([formId])
 }
 
 // =====================
@@ -578,6 +567,19 @@ model StallFair {
   purchaseId String
   purchase   OwnerFairPurchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
 
+  /**
+   * ✅ Taxa aplicada especificamente nesta barraca (na feira).
+   * Regras:
+   * - Uma barraca na feira só pode ter 1 taxa (taxId único no registro).
+   * - A taxa deve pertencer à mesma feira (validar no service).
+   * - Snapshot garante histórico contábil.
+   */
+  taxId String?
+  tax   FairTax? @relation(fields: [taxId], references: [id], onDelete: Restrict)
+
+  taxNameSnapshot       String?
+  taxPercentBpsSnapshot Int?
+
   createdAt DateTime @default(now())
 
   /**
@@ -667,6 +669,8 @@ model OwnerFairPurchase {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  fairTax   FairTax? @relation(fields: [fairTaxId], references: [id])
+  fairTaxId String?
 
   /**
    * ✅ Removemos o @@unique para permitir múltiplas linhas,
@@ -960,6 +964,8 @@ model ExcelTemplate {
   id     String              @id @default(uuid())
   name   String
   status ExcelTemplateStatus @default(ACTIVE)
+
+  scope ExcelTemplateScope @default(FAIR)
 
   /**
    * Abas que compõem o template.

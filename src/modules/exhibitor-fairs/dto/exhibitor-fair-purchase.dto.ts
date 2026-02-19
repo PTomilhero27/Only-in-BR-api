@@ -1,8 +1,15 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { OwnerFairPaymentStatus, StallSize } from '@prisma/client'
-import { IsEnum, IsInt, IsString, Min, ValidateNested } from 'class-validator'
-import { Type } from 'class-transformer'
-import { ExhibitorFairPurchaseInstallmentDto } from './exhibitor-fair-purchase-installment.dto'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { OwnerFairPaymentStatus, StallSize } from '@prisma/client';
+import { Type } from 'class-transformer';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { ExhibitorFairPurchaseInstallmentDto } from './exhibitor-fair-purchase-installment.dto';
 
 /**
  * Linha de compra (OwnerFairPurchase) para o portal.
@@ -12,51 +19,68 @@ import { ExhibitorFairPurchaseInstallmentDto } from './exhibitor-fair-purchase-i
  * - O portal consome linha por linha (purchaseId) ao vincular barracas.
  */
 export class ExhibitorFairPurchaseDto {
-  @ApiProperty({ example: 'ckx9p3z5p0001q8l1p2abcxyz', description: 'ID da compra.' })
+  @ApiProperty({
+    example: 'ckx9p3z5p0001q8l1p2abcxyz',
+    description: 'ID da compra.',
+  })
   @IsString()
-  id!: string
+  id!: string;
 
-  @ApiProperty({ enum: StallSize, example: StallSize.SIZE_3X3, description: 'Tamanho comprado.' })
+  @ApiProperty({
+    enum: StallSize,
+    example: StallSize.SIZE_3X3,
+    description: 'Tamanho comprado.',
+  })
   @IsEnum(StallSize)
-  stallSize!: StallSize
-
-  @ApiProperty({ example: 1, description: 'Quantidade comprada nesta linha (recomendado = 1).' })
-  @IsInt()
-  @Min(1)
-  qty!: number
-
-  @ApiProperty({ example: 0, description: 'Quantidade já consumida por StallFair.' })
-  @IsInt()
-  @Min(0)
-  usedQty!: number
+  stallSize!: StallSize;
 
   @ApiProperty({
     example: 1,
-    description: 'Quantidade restante disponível (derivada: max(0, qty - usedQty)).',
+    description: 'Quantidade comprada nesta linha (recomendado = 1).',
+  })
+  @IsInt()
+  @Min(1)
+  qty!: number;
+
+  @ApiProperty({
+    example: 0,
+    description: 'Quantidade já consumida por StallFair.',
   })
   @IsInt()
   @Min(0)
-  remainingQty!: number
+  usedQty!: number;
+
+  @ApiProperty({
+    example: 1,
+    description:
+      'Quantidade restante disponível (derivada: max(0, qty - usedQty)).',
+  })
+  @IsInt()
+  @Min(0)
+  remainingQty!: number;
 
   @ApiProperty({ example: 150000, description: 'Preço unitário (centavos).' })
   @IsInt()
   @Min(0)
-  unitPriceCents!: number
+  unitPriceCents!: number;
 
   @ApiProperty({ example: 150000, description: 'Total (centavos).' })
   @IsInt()
   @Min(0)
-  totalCents!: number
+  totalCents!: number;
 
   @ApiProperty({ example: 50000, description: 'Entrada paga (centavos).' })
   @IsInt()
   @Min(0)
-  paidCents!: number
+  paidCents!: number;
 
-  @ApiProperty({ example: 2, description: 'Quantidade de parcelas do restante.' })
+  @ApiProperty({
+    example: 2,
+    description: 'Quantidade de parcelas do restante.',
+  })
   @IsInt()
   @Min(0)
-  installmentsCount!: number
+  installmentsCount!: number;
 
   @ApiProperty({
     enum: OwnerFairPaymentStatus,
@@ -64,7 +88,33 @@ export class ExhibitorFairPurchaseDto {
     description: 'Status financeiro desta compra.',
   })
   @IsEnum(OwnerFairPaymentStatus)
-  status!: OwnerFairPaymentStatus
+  status!: OwnerFairPaymentStatus;
+
+  @ApiPropertyOptional({
+    example: 'f0c1b2a3-1234-5678-9abc-000000000000',
+    description:
+      'ID da taxa vinculada a esta compra (OwnerFairPurchase.fairTaxId).',
+  })
+  @IsOptional()
+  @IsString()
+  fairTaxId!: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Taxa padrão',
+    description: 'Nome da taxa (via relation fairTax).',
+  })
+  @IsOptional()
+  @IsString()
+  fairTaxName!: string | null;
+
+  @ApiPropertyOptional({
+    example: 500,
+    description: 'Percentual em BPS (via relation fairTax).',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  fairTaxPercentBps!: number | null;
 
   @ApiProperty({
     type: [ExhibitorFairPurchaseInstallmentDto],
@@ -72,5 +122,5 @@ export class ExhibitorFairPurchaseDto {
   })
   @ValidateNested({ each: true })
   @Type(() => ExhibitorFairPurchaseInstallmentDto)
-  installments!: ExhibitorFairPurchaseInstallmentDto[]
+  installments!: ExhibitorFairPurchaseInstallmentDto[];
 }
