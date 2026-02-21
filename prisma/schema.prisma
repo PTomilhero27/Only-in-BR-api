@@ -148,6 +148,15 @@ enum ExcelTemplateScope {
   STALL
 }
 
+enum MapElementType {
+  BOOTH_SLOT // slot de barraca (único linkável)
+  RECT
+  SQUARE
+  LINE
+  TEXT
+  TREE
+}
+
 model User {
   id String @id @default(uuid())
 
@@ -294,6 +303,7 @@ model Fair {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  fairMap   FairMap?
 
   @@index([createdByUserId])
 }
@@ -580,7 +590,8 @@ model StallFair {
   taxNameSnapshot       String?
   taxPercentBpsSnapshot Int?
 
-  createdAt DateTime @default(now())
+  createdAt         DateTime           @default(now())
+  fairMapBoothLinks FairMapBoothLink[]
 
   /**
    * Uma barraca não pode estar duas vezes na mesma feira.
@@ -1116,4 +1127,122 @@ model ExcelTemplateTableColumn {
   updatedAt DateTime @updatedAt
 
   @@index([tableId])
+}
+
+model MapTemplate {
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+
+  /**
+   * Apenas referência opcional para guiar o desenho.
+   * Não fazemos upload nem "armazenamento"; é só uma string.
+   * Pode ser uma URL pública, ou um path que você usa no front.
+   */
+  backgroundUrl String?
+
+  /**
+   * Dimensões do "mundo" do mapa, para o front saber o tamanho base.
+   * O front fica responsivo via zoom/fit, mas o mundo é fixo.
+   */
+  worldWidth  Int @default(2000)
+  worldHeight Int @default(1200)
+
+  version Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  elements MapTemplateElement[]
+  fairs    FairMap[]
+}
+
+model MapTemplateElement {
+  id         String      @id @default(cuid())
+  templateId String
+  template   MapTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  /**
+   * Chave estável gerada no front (ex.: "el_abcd").
+   * IMPORTANTE pra manter os slots fixos e permitir vínculo por slotKey.
+   */
+  clientKey String
+
+  type MapElementType
+
+  // Transform base
+  x        Float
+  y        Float
+  rotation Float @default(0)
+
+  // Rect/slot
+  width  Float?
+  height Float?
+  label  String?
+  number Int? // útil em BOOTH_SLOT (ex.: 1,2,3...)
+
+  // Line
+  points Json? // [x1,y1,x2,y2,...]
+
+  // Tree
+  radius Float?
+
+  // Style
+  style Json
+
+  /**
+   * Marca o slot como linkável (somente BOOTH_SLOT deve ser true).
+   * (Mantemos para validações extras e legibilidade.)
+   */
+  isLinkable Boolean @default(false)
+
+  @@unique([templateId, clientKey])
+  @@index([templateId])
+}
+
+model FairMap {
+  id     String @id @default(cuid())
+  fairId String @unique
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  templateId String
+  template   MapTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  /**
+   * Versão aplicada (ajuda a entender se a planta mudou desde a vinculação).
+   * Se você editar a planta, a feira "vê" a nova versão automaticamente,
+   * mas podemos registrar qual versão estava quando vinculou.
+   */
+  templateVersionAtLink Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  links FairMapBoothLink[]
+}
+
+model FairMapBoothLink {
+  id        String  @id @default(cuid())
+  fairMapId String
+  fairMap   FairMap @relation(fields: [fairMapId], references: [id], onDelete: Cascade)
+
+  /**
+   * O slot é identificado pelo clientKey do elemento BOOTH_SLOT na planta.
+   * Isso permite reutilizar a planta em várias feiras.
+   */
+  slotClientKey String
+
+  /**
+   * Barraca vinculada à feira (financeiro/participação).
+   * Só admins podem vincular.
+   */
+  stallFairId String
+  stallFair   StallFair @relation(fields: [stallFairId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fairMapId, slotClientKey])
+  @@unique([fairMapId, stallFairId]) // impede a mesma barraca em 2 slots
+  @@index([stallFairId])
 }

@@ -21,6 +21,8 @@ import { ExcelTemplatesModule } from './modules/excel-templates/excel-templates.
 import { ExcelExportsModule } from './modules/excel-exports/excel-exports.module';
 import { ExcelDatasetsModule } from './modules/excel-datasets/excel-datasets.module';
 import { ExcelExportRequirementsModule } from './modules/excel-export-requirements/excel-export-requirements.module';
+import { MapTemplatesModule } from './modules/map-templates/map-templates.module';
+import { FairMapsModule } from './modules/fair-maps/fair-maps.module';
 
 @Global()
 @Module({
@@ -44,6 +46,8 @@ import { ExcelExportRequirementsModule } from './modules/excel-export-requiremen
     ExcelExportsModule,
     ExcelDatasetsModule,
     ExcelExportRequirementsModule,
+    MapTemplatesModule,
+    FairMapsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],

@@ -1,13 +1,26 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { InterestsService } from './interests.service'
-import { GrantPortalAccessDto } from './dto/grant-portal-access.dto'
-import { GrantPortalAccessResponseDto } from './dto/grant-portal-access-response.dto'
-import { ListInterestsResponseDto } from './dto/list-interests-response.dto'
-import { ListInterestsDto } from './dto/list-interests.dto'
-import { CreateExhibitorPasswordResetTokenResponseDto } from './dto/create-exhibitor-password-reset-token-response-dto'
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { InterestsService } from './interests.service';
+import { GrantPortalAccessDto } from './dto/grant-portal-access.dto';
+import { GrantPortalAccessResponseDto } from './dto/grant-portal-access-response.dto';
+import { ListInterestsResponseDto } from './dto/list-interests-response.dto';
+import { ListInterestsDto } from './dto/list-interests.dto';
+import { CreateExhibitorPasswordResetTokenResponseDto } from './dto/create-exhibitor-password-reset-token-response-dto';
 
 /**
  * Controller do painel (admin) para Interessados.
@@ -35,8 +48,10 @@ export class InterestsController {
       'Retorna também campos calculados para UI (hasPortalLogin e stallsCount).',
   })
   @ApiOkResponse({ type: ListInterestsResponseDto })
-  async list(@Query() query: ListInterestsDto): Promise<ListInterestsResponseDto> {
-    return this.interestsService.list(query)
+  async list(
+    @Query() query: ListInterestsDto,
+  ): Promise<ListInterestsResponseDto> {
+    return this.interestsService.list(query);
   }
 
   @Post(':ownerId/portal-access')
@@ -51,7 +66,7 @@ export class InterestsController {
     @Param('ownerId') ownerId: string,
     @Body() body: GrantPortalAccessDto,
   ): Promise<GrantPortalAccessResponseDto> {
-    return this.interestsService.grantPortalAccess(ownerId, body)
+    return this.interestsService.grantPortalAccess(ownerId, body);
   }
 
   @Post(':ownerId/password-reset-token')
@@ -65,6 +80,6 @@ export class InterestsController {
   async createPasswordResetToken(
     @Param('ownerId') ownerId: string,
   ): Promise<CreateExhibitorPasswordResetTokenResponseDto> {
-    return this.interestsService.createPasswordResetToken({ ownerId })
+    return this.interestsService.createPasswordResetToken({ ownerId });
   }
 }

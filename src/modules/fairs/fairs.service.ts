@@ -20,6 +20,7 @@ import { UpdateExhibitorStatusDto } from './dto/exhibitors/update-exhibitor-stat
 import {
   AuditAction,
   AuditEntity,
+  MapElementType,
   OwnerFairPaymentStatus,
   OwnerFairStatus,
 } from '@prisma/client';
@@ -699,24 +700,17 @@ export class FairsService {
    *   - StallFairs (barracas vinculadas + compra consumida)
    *   - Contract summary (template da feira + instância + sign url)
    * - Retornar métricas da feira (capacidade/reservas)
+   *
+   * ✅ Atualização (Mapa 2D):
+   * - Agora retorna, para cada StallFair, o `slot` com:
+   *   - clientKey (chave estável do BOOTH_SLOT)
+   *   - number (número exibido no mapa)
+   *
+   * ✅ Atualização (Mapa no payload):
+   * - Agora retorna `fair.map` com template + elementos + links
+   *   para o front abrir o modal e renderizar o mapa “bonito e tech”.
    */
   async listExhibitorsWithStalls(fairId: string) {
-    /**
-     * Lista expositores (OwnerFair) no contexto da feira com:
-     * - Owner (contato + endereço + pagamento)
-     * - compras (OwnerFairPurchase + installments)
-     * - barracas vinculadas (StallFair + purchase consumida)
-     * - ✅ taxa por barraca (StallFair.taxId + snapshots)
-     * - ✅ catálogo de taxas da feira (Fair.taxes[])
-     * - contrato (instância + aditivo)
-     * - ✅ observações do admin (OwnerFair.observations)
-     *
-     * Decisão:
-     * - Retornamos `fair.taxes` para a UI conseguir escolher taxa por barraca
-     * - Retornamos `stallFair.taxSnapshot` para histórico contábil
-     * - Retornamos `linkedStalls` com `stallFairId` (para PATCH da taxa)
-     */
-
     const fair = await this.prisma.fair.findUnique({
       where: { id: fairId },
       select: {
@@ -728,7 +722,6 @@ export class FairsService {
         createdAt: true,
         updatedAt: true,
 
-        // ✅ Taxas cadastradas na feira (catálogo para UI)
         taxes: {
           orderBy: { createdAt: 'asc' },
           select: {
@@ -745,6 +738,7 @@ export class FairsService {
           orderBy: { startsAt: 'asc' },
           select: { id: true, startsAt: true, endsAt: true },
         },
+
         contractSettings: {
           select: {
             id: true,
@@ -767,6 +761,81 @@ export class FairsService {
 
     if (!fair) throw new NotFoundException('Feira não encontrada.');
 
+    // =========================================================
+    // MAPA 2D
+    // =========================================================
+
+    const fairMap = await this.prisma.fairMap.findUnique({
+      where: { fairId },
+      select: {
+        id: true,
+        fairId: true,
+        templateId: true,
+        templateVersionAtLink: true,
+        createdAt: true,
+        updatedAt: true,
+
+        template: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            backgroundUrl: true,
+            worldWidth: true,
+            worldHeight: true,
+            version: true,
+            createdAt: true,
+            updatedAt: true,
+
+            elements: {
+              select: {
+                id: true,
+                clientKey: true,
+                type: true,
+                x: true,
+                y: true,
+                rotation: true,
+                width: true,
+                height: true,
+                label: true,
+                number: true,
+                points: true,
+                radius: true,
+                style: true,
+                isLinkable: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const boothLinks = fairMap
+      ? await this.prisma.fairMapBoothLink.findMany({
+          where: { fairMapId: fairMap.id },
+          select: {
+            stallFairId: true,
+            slotClientKey: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        })
+      : [];
+
+    const slotClientKeyByStallFairId = new Map<string, string>(
+      boothLinks.map((l) => [l.stallFairId, l.slotClientKey]),
+    );
+
+    const slotNumberByClientKey = new Map<string, number | null>(
+      (fairMap?.template?.elements ?? [])
+        .filter((el) => el.type === MapElementType.BOOTH_SLOT)
+        .map((el) => [el.clientKey, el.number ?? null]),
+    );
+
+    // =========================================================
+    // OWNER FAIRS
+    // =========================================================
+
     const ownerFairs = await this.prisma.ownerFair.findMany({
       where: { fairId },
       orderBy: { createdAt: 'desc' },
@@ -774,13 +843,10 @@ export class FairsService {
         id: true,
         fairId: true,
         ownerId: true,
-
         stallsQty: true,
         status: true,
         contractSignedAt: true,
-
         observations: true,
-
         createdAt: true,
         updatedAt: true,
 
@@ -792,13 +858,11 @@ export class FairsService {
             fullName: true,
             email: true,
             phone: true,
-
             addressFull: true,
             addressCity: true,
             addressState: true,
             addressZipcode: true,
             addressNumber: true,
-
             pixKey: true,
             bankName: true,
             bankAgency: true,
@@ -806,7 +870,6 @@ export class FairsService {
             bankAccountType: true,
             bankHolderDoc: true,
             bankHolderName: true,
-
             stallsDescription: true,
           },
         },
@@ -817,13 +880,10 @@ export class FairsService {
             id: true,
             stallId: true,
             createdAt: true,
-
-            // ✅ taxa aplicada nesta barraca (snapshot)
             taxId: true,
             taxNameSnapshot: true,
             taxPercentBpsSnapshot: true,
 
-            // (opcional) relação para fallback/debug. Mantém leve.
             tax: {
               select: {
                 id: true,
@@ -846,6 +906,7 @@ export class FairsService {
                 teamQty: true,
               },
             },
+
             purchase: {
               select: {
                 id: true,
@@ -929,151 +990,71 @@ export class FairsService {
       (acc, x) => acc + (x.stallsQty ?? 0),
       0,
     );
+
     const stallsCapacity = Number(fair.stallsCapacity ?? 0);
     const stallsRemaining = Math.max(0, stallsCapacity - stallsReserved);
 
     const items = ownerFairs.map((of) => {
-      const stallFairs = Array.isArray(of.stallFairs) ? of.stallFairs : [];
-      const purchases = Array.isArray(of.ownerFairPurchases)
-        ? of.ownerFairPurchases
-        : [];
+      const stallFairs = of.stallFairs ?? [];
+      const purchases = of.ownerFairPurchases ?? [];
 
       const stallsQtyLinked = stallFairs.length;
 
       const aggregatedPayment =
         this.toAggregatedPaymentFromPurchases(purchases);
-      const isPaid = aggregatedPayment.status === OwnerFairPaymentStatus.PAID;
-
-      const computed = this.computeEffectiveStatus({
-        savedStatus: of.status as OwnerFairStatus,
-        contractSignedAt: of.contractSignedAt,
-        stallsQtyPurchased: of.stallsQty,
-        stallsQtyLinked,
-        isPaid: !!isPaid,
-      });
-
-      const signedAt = of.contractSignedAt
-        ? of.contractSignedAt.toISOString()
-        : null;
-      const signUrl = signedAt
-        ? null
-        : of.contract?.signUrl
-          ? of.contract.signUrl
-          : of.contract?.assinafyDocumentId
-            ? `https://app.assinafy.com.br/sign/${of.contract.assinafyDocumentId}`
-            : null;
-
-      const contractSummary = {
-        fairTemplate: fair.contractSettings?.template
-          ? {
-              id: fair.contractSettings.template.id,
-              title: fair.contractSettings.template.title,
-              status: fair.contractSettings.template.status,
-              updatedAt: fair.contractSettings.template.updatedAt.toISOString(),
-            }
-          : null,
-
-        instance: of.contract
-          ? {
-              id: of.contract.id,
-              templateId: of.contract.templateId,
-              addendumTemplateId: of.contract.addendumTemplateId ?? null,
-              pdfPath: of.contract.pdfPath ?? null,
-              assinafyDocumentId: of.contract.assinafyDocumentId ?? null,
-              createdAt: of.contract.createdAt.toISOString(),
-              updatedAt: of.contract.updatedAt.toISOString(),
-            }
-          : null,
-
-        addendumChoice: of.addendum
-          ? {
-              id: of.addendum.id,
-              templateId: of.addendum.templateId,
-              templateTitle: of.addendum.template?.title ?? null,
-              templateStatus: of.addendum.template?.status ?? null,
-              templateVersionNumber: of.addendum.templateVersionNumber,
-              createdAt: of.addendum.createdAt.toISOString(),
-              updatedAt: of.addendum.updatedAt.toISOString(),
-            }
-          : null,
-
-        signedAt,
-        signUrl,
-        hasPdf: Boolean(of.contract?.pdfPath),
-        hasContractInstance: Boolean(of.contract?.id),
-      };
 
       const purchasesPayments = purchases.map((p) =>
         this.toPurchasePaymentSummary(p),
       );
 
-      // ✅ StallFairs com taxa (snapshot) para UI e auditoria
-      const stallFairsLinked = stallFairs.map((sf) => ({
-        stallFairId: sf.id,
-        stallId: sf.stallId,
-        createdAt: sf.createdAt.toISOString(),
+      const stallFairsLinked = stallFairs.map((sf) => {
+        const slotClientKey = slotClientKeyByStallFairId.get(sf.id) ?? null;
 
-        // ✅ snapshot de taxa aplicado nesta barraca (1 taxa por barraca)
-        tax: sf.taxId
-          ? {
-              id: sf.taxId,
-              name: sf.taxNameSnapshot ?? sf.tax?.name ?? null,
-              percentBps:
-                sf.taxPercentBpsSnapshot ?? sf.tax?.percentBps ?? null,
-              isActive: sf.tax?.isActive ?? null,
-            }
-          : null,
+        return {
+          stallFairId: sf.id,
+          stallId: sf.stallId,
+          createdAt: sf.createdAt.toISOString(),
 
-        stall: sf.stall,
-        purchase: sf.purchase
-          ? {
-              id: sf.purchase.id,
-              stallSize: sf.purchase.stallSize,
-              unitPriceCents: sf.purchase.unitPriceCents,
-              qty: sf.purchase.qty,
-              usedQty: sf.purchase.usedQty,
-              status: sf.purchase.status,
-            }
-          : null,
-      }));
+          slot: slotClientKey
+            ? {
+                clientKey: slotClientKey,
+                number: slotNumberByClientKey.get(slotClientKey) ?? null,
+              }
+            : null,
 
-      // ✅ linkedStalls agora precisa trazer stallFairId + tax (para a aba "Barracas" no modal)
-      const linkedStalls = stallFairs.map((sf) => ({
-        stallFairId: sf.id, // ✅ ESSENCIAL para PATCH taxa
-        tax: sf.taxId
-          ? {
-              id: sf.taxId,
-              name: sf.taxNameSnapshot ?? sf.tax?.name ?? null,
-              percentBps:
-                sf.taxPercentBpsSnapshot ?? sf.tax?.percentBps ?? null,
-            }
-          : null,
-        ...sf.stall,
-      }));
+          tax: sf.taxId
+            ? {
+                id: sf.taxId,
+                name: sf.taxNameSnapshot ?? sf.tax?.name ?? null,
+                percentBps:
+                  sf.taxPercentBpsSnapshot ?? sf.tax?.percentBps ?? null,
+              }
+            : null,
+
+          stall: sf.stall,
+          purchase: sf.purchase,
+        };
+      });
 
       return {
         ownerFairId: of.id,
         fairId: of.fairId,
-
         owner: of.owner,
 
         stallsQtyPurchased: of.stallsQty,
         stallsQtyLinked,
-        linkedStalls,
 
-        status: computed.status,
-        isComplete: computed.isComplete,
-
-        contractSignedAt: signedAt,
-
-        observations: of.observations ?? null,
-
-        payment: aggregatedPayment,
-
-        purchasesPayments,
+        linkedStalls: stallFairsLinked,
         stallFairs: stallFairsLinked,
 
-        contract: contractSummary,
+        status: of.status,
+        contractSignedAt: of.contractSignedAt
+          ? of.contractSignedAt.toISOString()
+          : null,
+
+        observations: of.observations ?? null,
+        payment: aggregatedPayment,
+        purchasesPayments,
       };
     });
 
@@ -1088,7 +1069,6 @@ export class FairsService {
         stallsReserved,
         stallsRemaining,
 
-        // ✅ catálogo de taxas da feira (para UI escolher)
         taxes: fair.taxes.map((t) => ({
           id: t.id,
           name: t.name,
@@ -1099,7 +1079,7 @@ export class FairsService {
         })),
 
         occurrences: fair.occurrences.map((o) => ({
-          ...o,
+          id: o.id,
           startsAt: o.startsAt.toISOString(),
           endsAt: o.endsAt.toISOString(),
         })),
@@ -1109,7 +1089,6 @@ export class FairsService {
               id: fair.contractSettings.id,
               templateId: fair.contractSettings.templateId,
               updatedAt: fair.contractSettings.updatedAt.toISOString(),
-              updatedByUserId: fair.contractSettings.updatedByUserId ?? null,
               template: {
                 id: fair.contractSettings.template.id,
                 title: fair.contractSettings.template.title,
@@ -1118,6 +1097,56 @@ export class FairsService {
                 updatedAt:
                   fair.contractSettings.template.updatedAt.toISOString(),
               },
+            }
+          : null,
+
+        // ✅ MAPA COMPLETO
+        map: fairMap
+          ? {
+              id: fairMap.id,
+              templateId: fairMap.templateId,
+              templateVersionAtLink: fairMap.templateVersionAtLink,
+              createdAt: fairMap.createdAt.toISOString(),
+              updatedAt: fairMap.updatedAt.toISOString(),
+
+              template: fairMap.template
+                ? {
+                    id: fairMap.template.id,
+                    title: fairMap.template.title,
+                    description: fairMap.template.description ?? null,
+                    backgroundUrl: fairMap.template.backgroundUrl ?? null,
+                    worldWidth: fairMap.template.worldWidth,
+                    worldHeight: fairMap.template.worldHeight,
+                    version: fairMap.template.version,
+                    createdAt: fairMap.template.createdAt.toISOString(),
+                    updatedAt: fairMap.template.updatedAt.toISOString(),
+
+                    elements: fairMap.template.elements.map((el) => ({
+                      id: el.id,
+                      clientKey: el.clientKey,
+                      type: el.type,
+                      x: el.x,
+                      y: el.y,
+                      rotation: el.rotation ?? 0,
+                      width: el.width ?? null,
+                      height: el.height ?? null,
+                      label: el.label ?? null,
+                      number: el.number ?? null,
+                      points: el.points ?? null,
+                      radius: el.radius ?? null,
+                      style: el.style,
+                      isLinkable: el.isLinkable,
+                    })),
+                  }
+                : null,
+
+              links: boothLinks.map((l) => ({
+                stallFairId: l.stallFairId,
+                slotClientKey: l.slotClientKey,
+                slotNumber: slotNumberByClientKey.get(l.slotClientKey) ?? null,
+                createdAt: l.createdAt.toISOString(),
+                updatedAt: l.updatedAt.toISOString(),
+              })),
             }
           : null,
 
