@@ -63,6 +63,12 @@ enum AuditEntity {
   STALL_FAIR
   OWNER_FAIR_PURCHASE
   OWNER_FAIR_PURCHASE_PAYMENT
+  OWNER_FAIR_PURCHASE_ADJUSTMENT
+}
+
+enum AdjustmentType {
+  DISCOUNT
+  SURCHARGE
 }
 
 /**
@@ -214,6 +220,7 @@ model User {
 
   fairContractSettings                 FairContractSettings[]
   ownerFairPurchaseInstallmentPayments OwnerFairPurchaseInstallmentPayment[]
+  ownerFairPurchaseAdjustments         OwnerFairPurchaseAdjustment[]
 
   @@index([ownerId])
   @@index([role])
@@ -683,6 +690,8 @@ model OwnerFairPurchase {
   fairTax   FairTax? @relation(fields: [fairTaxId], references: [id])
   fairTaxId String?
 
+  adjustments OwnerFairPurchaseAdjustment[]
+
   /**
    * ✅ Removemos o @@unique para permitir múltiplas linhas,
    * mesmo com mesmo tamanho e preço.
@@ -693,6 +702,37 @@ model OwnerFairPurchase {
   @@index([ownerFairId])
   @@index([stallSize])
   @@index([status])
+}
+
+model OwnerFairPurchaseAdjustment {
+  id String @id @default(cuid())
+
+  purchaseId String
+  purchase   OwnerFairPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  /**
+   * Valor do ajuste em centavos.
+   * Regras:
+   * - negativo = desconto
+   * - positivo = acréscimo
+   */
+  amountCents Int
+
+  /**
+   * Motivo/observação do ajuste.
+   */
+  reason          String?
+  type            AdjustmentType
+  /**
+   * Quem lançou (admin)
+   */
+  createdByUserId String
+  createdBy       User           @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([purchaseId])
+  @@index([createdByUserId])
 }
 
 model OwnerFairPurchaseInstallment {

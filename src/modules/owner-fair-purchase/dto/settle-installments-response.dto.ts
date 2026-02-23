@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { OwnerFairPaymentStatus } from '@prisma/client'
+import { ApiProperty } from '@nestjs/swagger';
+import { OwnerFairPaymentStatus } from '@prisma/client';
 
 /**
  * Resposta enxuta para a UI do Admin atualizar badges/cards
@@ -7,43 +7,43 @@ import { OwnerFairPaymentStatus } from '@prisma/client'
  */
 export class SettleInstallmentsResponseDto {
   @ApiProperty({ example: true })
-  ok!: boolean
+  ok!: boolean;
 
   @ApiProperty({
     description: 'ID da compra (OwnerFairPurchase) atualizada.',
     example: 'ckv9p0q2d0001m8x9l2z4abcd',
   })
-  purchaseId!: string
+  purchaseId!: string;
 
   @ApiProperty({
     description: 'Status financeiro recalculado da compra.',
     enum: OwnerFairPaymentStatus,
     example: OwnerFairPaymentStatus.PARTIALLY_PAID,
   })
-  status!: OwnerFairPaymentStatus
+  status!: OwnerFairPaymentStatus;
 
   @ApiProperty({
     description: 'Total de parcelas desta compra.',
     example: 3,
   })
-  installmentsCount!: number
+  installmentsCount!: number;
 
   @ApiProperty({
     description: 'Quantidade de parcelas pagas.',
     example: 1,
   })
-  paidCount!: number
+  paidCount!: number;
 
   @ApiProperty({
     description:
       'Total pago na compra em centavos (entrada + parcelas pagas), recalculado.',
     example: 20000,
   })
-  paidCents!: number
+  paidCents!: number;
 
   @ApiProperty({
     description: 'Total da compra em centavos.',
     example: 30000,
   })
-  totalCents!: number
+  totalCents!: number;
 }

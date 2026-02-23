@@ -29,11 +29,6 @@ import type { JwtPayload } from 'src/common/types/jwt-payload.type';
 import { UpdateExhibitorStatusDto } from './dto/exhibitors/update-exhibitor-status.dto';
 import { FairExhibitorsResponseDto } from './dto/exhibitors/fair-exhibitors.dto';
 
-import { SettleInstallmentsResponseDto } from './dto/exhibitors/settle-installments-response.dto';
-import { SettleStallInstallmentsDto } from './dto/exhibitors/settle-stall-installments.dto';
-import { RescheduleInstallmentDto } from './dto/exhibitors/reschedule-installment.dto';
-import { CreateInstallmentPaymentDto } from './dto/exhibitors/create-installment-payment.dto';
-import { InstallmentPaymentActionResponseDto } from './dto/exhibitors/installment-payment-action-response.dto';
 import { UpdateOwnerFairObservationsDto } from './dto/exhibitors/update-ownerfair-observations.dto';
 
 /**
@@ -110,84 +105,6 @@ export class FairsController {
     return this.fairsService.updateExhibitorStatus(
       fairId,
       ownerId,
-      dto,
-      user.id,
-    );
-  }
-
-  // ---------------------------------------------------------
-  // Ações financeiras (por compra / parcelas)
-  // ---------------------------------------------------------
-
-  @Patch(':fairId/exhibitors/:ownerId/payment/installments/settle')
-  @ApiOperation({
-    summary:
-      'Atalho: marcar/desfazer parcelas como pagas por compra (OwnerFairPurchase).',
-  })
-  @ApiOkResponse({ type: SettleInstallmentsResponseDto })
-  @HttpCode(200)
-  settleInstallments(
-    @Param('fairId') fairId: string,
-    @Param('ownerId') ownerId: string,
-    @Body() dto: SettleStallInstallmentsDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.fairsService.settleStallInstallments(
-      fairId,
-      ownerId,
-      dto,
-      user.id,
-    );
-  }
-
-  @Patch(
-    ':fairId/exhibitors/:ownerId/purchases/:purchaseId/installments/:number/reschedule',
-  )
-  @ApiOperation({
-    summary: 'Reprogramar vencimento de uma parcela (negociação).',
-  })
-  @ApiOkResponse({ type: InstallmentPaymentActionResponseDto })
-  @HttpCode(200)
-  rescheduleInstallment(
-    @Param('fairId') fairId: string,
-    @Param('ownerId') ownerId: string,
-    @Param('purchaseId') purchaseId: string,
-    @Param('number') number: string,
-    @Body() dto: RescheduleInstallmentDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.fairsService.reschedulePurchaseInstallment(
-      fairId,
-      ownerId,
-      purchaseId,
-      Number(number),
-      dto,
-      user.id,
-    );
-  }
-
-  @Post(
-    ':fairId/exhibitors/:ownerId/purchases/:purchaseId/installments/:number/payments',
-  )
-  @ApiOperation({
-    summary:
-      'Registrar pagamento (histórico) em uma parcela (suporta parcial).',
-  })
-  @ApiCreatedResponse({ type: InstallmentPaymentActionResponseDto })
-  @HttpCode(201)
-  createInstallmentPayment(
-    @Param('fairId') fairId: string,
-    @Param('ownerId') ownerId: string,
-    @Param('purchaseId') purchaseId: string,
-    @Param('number') number: string,
-    @Body() dto: CreateInstallmentPaymentDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.fairsService.createInstallmentPayment(
-      fairId,
-      ownerId,
-      purchaseId,
-      Number(number),
       dto,
       user.id,
     );

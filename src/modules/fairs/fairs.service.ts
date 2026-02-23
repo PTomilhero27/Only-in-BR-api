@@ -24,10 +24,6 @@ import {
   OwnerFairPaymentStatus,
   OwnerFairStatus,
 } from '@prisma/client';
-import {
-  SettleInstallmentsAction,
-  SettleStallInstallmentsDto,
-} from './dto/exhibitors/settle-stall-installments.dto';
 
 import { FairTaxUpsertDto } from './dto/fair-tax.dto';
 
@@ -711,6 +707,24 @@ export class FairsService {
    *   para o front abrir o modal e renderizar o mapa “bonito e tech”.
    */
   async listExhibitorsWithStalls(fairId: string) {
+    /**
+     * Lista expositores (OwnerFair) no contexto da feira com:
+     * - Owner (contato + endereço + pagamento)
+     * - compras (OwnerFairPurchase + installments)
+     * - barracas vinculadas (StallFair + purchase consumida)
+     * - taxa por barraca (StallFair.taxId + snapshots)
+     * - catálogo de taxas da feira (Fair.taxes[])
+     * - contrato (instância + aditivo) ✅ (DETALHADO POR ITEM, como estava)
+     * - observações do admin (OwnerFair.observations)
+     * - mapa 2D (template + elements + links)
+     *
+     * Decisão:
+     * - Retornamos `fair.taxes` para a UI conseguir escolher taxa por barraca
+     * - Retornamos `stallFair.taxSnapshot` para histórico contábil
+     * - Retornamos `linkedStalls` com `stallFairId` (para PATCH da taxa)
+     * - Retornamos `contract` detalhado por item para a UI gerir preview/download/assinatura
+     */
+
     const fair = await this.prisma.fair.findUnique({
       where: { id: fairId },
       select: {
@@ -951,6 +965,7 @@ export class FairsService {
           },
         },
 
+        // ✅ Contrato (instância por expositor)
         contract: {
           select: {
             id: true,
@@ -965,6 +980,7 @@ export class FairsService {
           },
         },
 
+        // ✅ Aditivo escolhido por expositor (opcional)
         addendum: {
           select: {
             id: true,
@@ -990,7 +1006,6 @@ export class FairsService {
       (acc, x) => acc + (x.stallsQty ?? 0),
       0,
     );
-
     const stallsCapacity = Number(fair.stallsCapacity ?? 0);
     const stallsRemaining = Math.max(0, stallsCapacity - stallsReserved);
 
@@ -1015,6 +1030,7 @@ export class FairsService {
           stallId: sf.stallId,
           createdAt: sf.createdAt.toISOString(),
 
+          // ✅ vínculo do slot do mapa (quando existir)
           slot: slotClientKey
             ? {
                 clientKey: slotClientKey,
@@ -1022,6 +1038,7 @@ export class FairsService {
               }
             : null,
 
+          // ✅ taxa por barraca (snapshot)
           tax: sf.taxId
             ? {
                 id: sf.taxId,
@@ -1035,6 +1052,71 @@ export class FairsService {
           purchase: sf.purchase,
         };
       });
+
+      // =========================================================
+      // ✅ CONTRATO DETALHADO (voltou como estava, sem remover nada)
+      // =========================================================
+
+      const signedAt = of.contractSignedAt
+        ? of.contractSignedAt.toISOString()
+        : null;
+
+      /**
+       * Regra do link de assinatura:
+       * - se já assinou, não retornamos link
+       * - se o contrato tiver signUrl salvo, usamos ele
+       * - senão, se houver assinafyDocumentId, montamos fallback para o app da Assinafy
+       */
+      const signUrl = signedAt
+        ? null
+        : of.contract?.signUrl
+          ? of.contract.signUrl
+          : of.contract?.assinafyDocumentId
+            ? `https://app.assinafy.com.br/sign/${of.contract.assinafyDocumentId}`
+            : null;
+
+      const contractSummary = {
+        // Template configurado na feira (contrato padrão)
+        fairTemplate: fair.contractSettings?.template
+          ? {
+              id: fair.contractSettings.template.id,
+              title: fair.contractSettings.template.title,
+              status: fair.contractSettings.template.status,
+              updatedAt: fair.contractSettings.template.updatedAt.toISOString(),
+            }
+          : null,
+
+        // Instância do contrato do expositor (pode existir mesmo antes da assinatura)
+        instance: of.contract
+          ? {
+              id: of.contract.id,
+              templateId: of.contract.templateId,
+              addendumTemplateId: of.contract.addendumTemplateId ?? null,
+              pdfPath: of.contract.pdfPath ?? null,
+              assinafyDocumentId: of.contract.assinafyDocumentId ?? null,
+              createdAt: of.contract.createdAt.toISOString(),
+              updatedAt: of.contract.updatedAt.toISOString(),
+            }
+          : null,
+
+        // Aditivo escolhido no vínculo expositor↔feira (opcional)
+        addendumChoice: of.addendum
+          ? {
+              id: of.addendum.id,
+              templateId: of.addendum.templateId,
+              templateTitle: of.addendum.template?.title ?? null,
+              templateStatus: of.addendum.template?.status ?? null,
+              templateVersionNumber: of.addendum.templateVersionNumber,
+              createdAt: of.addendum.createdAt.toISOString(),
+              updatedAt: of.addendum.updatedAt.toISOString(),
+            }
+          : null,
+
+        signedAt,
+        signUrl,
+        hasPdf: Boolean(of.contract?.pdfPath),
+        hasContractInstance: Boolean(of.contract?.id),
+      };
 
       return {
         ownerFairId: of.id,
@@ -1055,6 +1137,9 @@ export class FairsService {
         observations: of.observations ?? null,
         payment: aggregatedPayment,
         purchasesPayments,
+
+        // ✅ voltou exatamente o contrato detalhado por item
+        contract: contractSummary,
       };
     });
 
@@ -1161,205 +1246,6 @@ export class FairsService {
   // ---------------------------------------------------------
   // PATCH installments (AGORA: por PURCHASE)
   // ---------------------------------------------------------
-
-  /**
-   * Atalho para marcar/desmarcar parcelas como pagas (por compra).
-   * Responsabilidade:
-   * - Validar se a compra pertence ao owner + fair
-   * - Atualizar paidAt/paidAmountCents das parcelas
-   * - Recalcular paidCents/status/paidAt da compra
-   * - Registrar auditoria com meta útil
-   */
-  async settleStallInstallments(
-    fairId: string,
-    ownerId: string,
-    dto: SettleStallInstallmentsDto,
-    actorUserId: string,
-  ) {
-    return this.prisma.$transaction(async (tx) => {
-      const purchaseId = dto.purchaseId;
-
-      const purchase = await tx.ownerFairPurchase.findUnique({
-        where: { id: purchaseId },
-        include: {
-          ownerFair: { select: { id: true, ownerId: true, fairId: true } },
-          installments: { orderBy: { number: 'asc' } },
-        },
-      });
-
-      if (!purchase)
-        throw new NotFoundException(
-          'Compra (OwnerFairPurchase) não encontrada.',
-        );
-
-      // ✅ segurança de consistência (evita "contratos implícitos")
-      if (purchase.ownerFair.fairId !== fairId) {
-        throw new BadRequestException('Compra não pertence à feira informada.');
-      }
-      if (purchase.ownerFair.ownerId !== ownerId) {
-        throw new BadRequestException(
-          'Compra não pertence ao expositor informado.',
-        );
-      }
-
-      if (purchase.status === OwnerFairPaymentStatus.CANCELLED) {
-        throw new BadRequestException('Compra cancelada. Ação não permitida.');
-      }
-
-      const installments = Array.isArray(purchase.installments)
-        ? purchase.installments
-        : [];
-      if ((purchase.installmentsCount ?? 0) > 0 && installments.length === 0) {
-        throw new BadRequestException(
-          'Compra inválida: nenhuma parcela encontrada.',
-        );
-      }
-
-      const numbersToAffect = dto.payAll
-        ? installments.map((i) => i.number)
-        : Array.isArray(dto.numbers)
-          ? dto.numbers
-          : [];
-
-      if (!dto.payAll && numbersToAffect.length === 0) {
-        throw new BadRequestException('Informe payAll=true ou numbers=[...].');
-      }
-
-      // valida números existentes
-      const existingNumbers = new Set(installments.map((i) => i.number));
-      for (const n of numbersToAffect) {
-        if (!existingNumbers.has(n)) {
-          throw new BadRequestException(
-            `Parcela ${n} não existe nesta compra.`,
-          );
-        }
-      }
-
-      const now = new Date();
-      const paidAtValue = dto.paidAt
-        ? this.parseDateOnlyToUTC(dto.paidAt)
-        : now;
-
-      // snapshot para auditoria (antes)
-      const before = purchase;
-
-      if (dto.action === SettleInstallmentsAction.SET_PAID) {
-        const toUpdate = installments.filter(
-          (i) => numbersToAffect.includes(i.number) && !i.paidAt,
-        );
-
-        await Promise.all(
-          toUpdate.map((inst) =>
-            tx.ownerFairPurchaseInstallment.update({
-              where: {
-                purchaseId_number: { purchaseId, number: inst.number },
-              },
-              data: {
-                paidAt: paidAtValue,
-                paidAmountCents: dto.paidAmountCents ?? undefined,
-              },
-            }),
-          ),
-        );
-      } else if (dto.action === SettleInstallmentsAction.SET_UNPAID) {
-        const toUpdate = installments.filter(
-          (i) => numbersToAffect.includes(i.number) && !!i.paidAt,
-        );
-
-        await Promise.all(
-          toUpdate.map((inst) =>
-            tx.ownerFairPurchaseInstallment.update({
-              where: {
-                purchaseId_number: { purchaseId, number: inst.number },
-              },
-              data: { paidAt: null, paidAmountCents: null },
-            }),
-          ),
-        );
-      } else {
-        throw new BadRequestException(
-          'Ação inválida. Use SET_PAID ou SET_UNPAID.',
-        );
-      }
-
-      // ✅ recarrega parcelas e recalcula financeiros da compra
-      const refreshed = await tx.ownerFairPurchase.findUnique({
-        where: { id: purchaseId },
-        include: { installments: { orderBy: { number: 'asc' } } },
-      });
-      if (!refreshed)
-        throw new NotFoundException('Compra não encontrada após atualização.');
-
-      const computed = this.computePurchaseFinancials({
-        totalCents: refreshed.totalCents,
-        installments: (refreshed.installments ?? []).map((i) => ({
-          dueDate: i.dueDate,
-          amountCents: i.amountCents,
-          paidAt: i.paidAt,
-          paidAmountCents: i.paidAmountCents,
-        })),
-        now,
-      });
-
-      const updatedPurchase = await tx.ownerFairPurchase.update({
-        where: { id: purchaseId },
-        data: {
-          paidCents: computed.paidCents,
-          status: computed.status,
-          paidAt: computed.paidAt,
-        },
-        include: { installments: { orderBy: { number: 'asc' } } },
-      });
-
-      await this.audit.log(tx, {
-        action: AuditAction.UPDATE,
-        entity: AuditEntity.OWNER_FAIR_PURCHASE_PAYMENT,
-        entityId: updatedPurchase.id,
-        actorUserId,
-        before,
-        after: updatedPurchase,
-        meta: {
-          fairId,
-          ownerId,
-          ownerFairId: purchase.ownerFairId,
-          purchaseId,
-          action: dto.action,
-          payAll: !!dto.payAll,
-          numbers: numbersToAffect,
-        },
-      });
-
-      // ✅ NOVO: se ficou 100% pago, recomputa status do OwnerFair (pendências -> concluído)
-      let ownerFairStatusInfo: any = null;
-      if (
-        this.shouldRecomputeOwnerFairAfterPurchaseUpdate({
-          totalCents: updatedPurchase.totalCents,
-          paidCents: updatedPurchase.paidCents,
-        })
-      ) {
-        ownerFairStatusInfo = await this.recomputeAndApplyOwnerFairStatus(
-          tx,
-          purchase.ownerFairId,
-          actorUserId,
-          { trigger: 'SETTLE_INSTALLMENTS', purchaseId },
-        );
-      }
-
-      return {
-        ok: true,
-        purchaseId: updatedPurchase.id,
-        status: updatedPurchase.status,
-        installmentsCount: updatedPurchase.installmentsCount,
-        paidCount: updatedPurchase.installments.filter((i) => !!i.paidAt)
-          .length,
-        paidCents: updatedPurchase.paidCents,
-        totalCents: updatedPurchase.totalCents,
-        // ✅ NOVO (útil pro front): status do expositor pode mudar automaticamente
-        ownerFairStatus: ownerFairStatusInfo?.status ?? null,
-        ownerFairStatusInfo,
-      };
-    });
-  }
 
   // ---------------------------------------------------------
   // Status do expositor
@@ -1767,333 +1653,6 @@ export class FairsService {
     if ((args.totalCents ?? 0) <= 0) return false;
 
     return (args.paidCents ?? 0) >= (args.totalCents ?? 0);
-  }
-
-  // ---------------------------------------------------------
-  // Reprogramar vencimento (histórico)
-  // ---------------------------------------------------------
-
-  /**
-   * Reprograma o vencimento de uma parcela (negociação).
-   * Responsabilidade:
-   * - Atualizar dueDate
-   * - Recalcular status da compra (OVERDUE pode mudar)
-   * - Gerar auditoria
-   */
-  async reschedulePurchaseInstallment(
-    fairId: string,
-    ownerId: string,
-    purchaseId: string,
-    installmentNumber: number,
-    dto: { dueDate: string; reason?: string },
-    actorUserId: string,
-  ) {
-    return this.prisma.$transaction(async (tx) => {
-      const purchase = await tx.ownerFairPurchase.findUnique({
-        where: { id: purchaseId },
-        include: {
-          ownerFair: { select: { id: true, ownerId: true, fairId: true } },
-          installments: {
-            orderBy: { number: 'asc' },
-            include: { payments: { orderBy: { paidAt: 'asc' } } },
-          },
-        },
-      });
-
-      if (!purchase) throw new NotFoundException('Compra não encontrada.');
-      if (purchase.ownerFair.fairId !== fairId)
-        throw new BadRequestException('Compra não pertence à feira informada.');
-      if (purchase.ownerFair.ownerId !== ownerId)
-        throw new BadRequestException(
-          'Compra não pertence ao expositor informado.',
-        );
-
-      const installment = (purchase.installments ?? []).find(
-        (i) => i.number === installmentNumber,
-      );
-      if (!installment) throw new NotFoundException('Parcela não encontrada.');
-
-      const before = installment;
-
-      const updatedInstallment = await tx.ownerFairPurchaseInstallment.update({
-        where: { purchaseId_number: { purchaseId, number: installmentNumber } },
-        data: { dueDate: this.parseDateOnlyToUTC(dto.dueDate) },
-        include: { payments: { orderBy: { paidAt: 'asc' } } },
-      });
-
-      // ✅ Recalcula compra (status pode sair de OVERDUE)
-      const now = new Date();
-      const purchaseAfterReload = await tx.ownerFairPurchase.findUnique({
-        where: { id: purchaseId },
-        include: {
-          installments: { orderBy: { number: 'asc' } },
-        },
-      });
-      if (!purchaseAfterReload)
-        throw new NotFoundException(
-          'Compra não encontrada após reagendamento.',
-        );
-
-      const purchaseComputed = this.computePurchaseCacheFromInstallments({
-        totalCents: purchaseAfterReload.totalCents,
-        installments: purchaseAfterReload.installments.map((i) => ({
-          dueDate: i.dueDate,
-          amountCents: i.amountCents,
-          paidAmountCents: i.paidAmountCents,
-          paidAt: i.paidAt,
-        })),
-        now,
-      });
-
-      const purchaseUpdated = await tx.ownerFairPurchase.update({
-        where: { id: purchaseId },
-        data: {
-          paidCents: purchaseComputed.paidCents,
-          status: purchaseComputed.status,
-          paidAt: purchaseComputed.paidAt,
-        },
-      });
-
-      await this.audit.log(tx, {
-        action: AuditAction.UPDATE,
-        entity: AuditEntity.OWNER_FAIR_PURCHASE_PAYMENT,
-        entityId: purchaseId,
-        actorUserId,
-        before: { installment: before },
-        after: { installment: updatedInstallment, purchase: purchaseUpdated },
-        meta: {
-          fairId,
-          ownerId,
-          ownerFairId: purchase.ownerFairId,
-          purchaseId,
-          installmentNumber,
-          action: 'RESCHEDULE_DUE_DATE',
-          reason: dto.reason ?? null,
-          newDueDate: dto.dueDate,
-        },
-      });
-
-      // ✅ NOVO: se ficou 100% pago, recomputa status do OwnerFair (pendências -> concluído)
-      let ownerFairStatusInfo: any = null;
-      if (
-        this.shouldRecomputeOwnerFairAfterPurchaseUpdate({
-          totalCents: purchaseUpdated.totalCents,
-          paidCents: purchaseUpdated.paidCents,
-        })
-      ) {
-        ownerFairStatusInfo = await this.recomputeAndApplyOwnerFairStatus(
-          tx,
-          purchase.ownerFairId,
-          actorUserId,
-          { trigger: 'RESCHEDULE_INSTALLMENT', purchaseId, installmentNumber },
-        );
-      }
-
-      return {
-        ok: true,
-        purchaseId: purchaseUpdated.id,
-        purchaseStatus: purchaseUpdated.status,
-        purchaseTotalCents: purchaseUpdated.totalCents,
-        purchasePaidCents: purchaseUpdated.paidCents,
-        purchasePaidAt: purchaseUpdated.paidAt
-          ? purchaseUpdated.paidAt.toISOString()
-          : null,
-        installmentId: updatedInstallment.id,
-        installmentNumber: updatedInstallment.number,
-        installmentAmountCents: updatedInstallment.amountCents,
-        installmentPaidAmountCents: updatedInstallment.paidAmountCents ?? 0,
-        installmentPaidAt: updatedInstallment.paidAt
-          ? updatedInstallment.paidAt.toISOString()
-          : null,
-        installmentDueDate: updatedInstallment.dueDate.toISOString(),
-        // ✅ NOVO
-        ownerFairStatus: ownerFairStatusInfo?.status ?? null,
-        ownerFairStatusInfo,
-      };
-    });
-  }
-
-  // ---------------------------------------------------------
-  // Registrar pagamento parcial (histórico)
-  // ---------------------------------------------------------
-
-  /**
-   * Registra um pagamento no histórico de uma parcela.
-   * Responsabilidade:
-   * - Criar registro em OwnerFairPurchaseInstallmentPayment
-   * - Recalcular cache da parcela (paidAmountCents, paidAt quando quitou)
-   * - Recalcular cache/status da compra (paidCents, status, paidAt)
-   * - Gerar auditoria
-   */
-  async createInstallmentPayment(
-    fairId: string,
-    ownerId: string,
-    purchaseId: string,
-    installmentNumber: number,
-    dto: { paidAt: string; amountCents: number; note?: string },
-    actorUserId: string,
-  ) {
-    return this.prisma.$transaction(async (tx) => {
-      const purchase = await tx.ownerFairPurchase.findUnique({
-        where: { id: purchaseId },
-        include: {
-          ownerFair: { select: { id: true, ownerId: true, fairId: true } },
-          installments: {
-            orderBy: { number: 'asc' },
-            include: { payments: { orderBy: { paidAt: 'asc' } } },
-          },
-        },
-      });
-
-      if (!purchase) throw new NotFoundException('Compra não encontrada.');
-      if (purchase.ownerFair.fairId !== fairId)
-        throw new BadRequestException('Compra não pertence à feira informada.');
-      if (purchase.ownerFair.ownerId !== ownerId)
-        throw new BadRequestException(
-          'Compra não pertence ao expositor informado.',
-        );
-
-      if (purchase.status === OwnerFairPaymentStatus.CANCELLED) {
-        throw new BadRequestException('Compra cancelada. Ação não permitida.');
-      }
-
-      const installment = (purchase.installments ?? []).find(
-        (i) => i.number === installmentNumber,
-      );
-      if (!installment) throw new NotFoundException('Parcela não encontrada.');
-
-      // ✅ cria pagamento no histórico
-      const payment = await tx.ownerFairPurchaseInstallmentPayment.create({
-        data: {
-          installmentId: installment.id,
-          paidAt: this.parseDateOnlyToUTC(dto.paidAt),
-          amountCents: dto.amountCents,
-          note: dto.note ?? null,
-          createdByUserId: actorUserId,
-        },
-      });
-
-      // ✅ recarrega pagamentos da parcela para recalcular cache
-      const installmentAfter = await tx.ownerFairPurchaseInstallment.findUnique(
-        {
-          where: { id: installment.id },
-          include: { payments: { orderBy: { paidAt: 'asc' } } },
-        },
-      );
-      if (!installmentAfter)
-        throw new NotFoundException('Parcela não encontrada após pagamento.');
-
-      const installmentCache = this.computeInstallmentCache({
-        installmentAmountCents: installmentAfter.amountCents,
-        payments: installmentAfter.payments.map((p) => ({
-          paidAt: p.paidAt,
-          amountCents: p.amountCents,
-        })),
-      });
-
-      const installmentUpdated = await tx.ownerFairPurchaseInstallment.update({
-        where: { id: installment.id },
-        data: {
-          paidAmountCents: installmentCache.paidAmountCents,
-          paidAt: installmentCache.paidAt,
-        },
-      });
-
-      // ✅ recalcula compra (paidCents/status/paidAt)
-      const purchaseReload = await tx.ownerFairPurchase.findUnique({
-        where: { id: purchaseId },
-        include: { installments: { orderBy: { number: 'asc' } } },
-      });
-      if (!purchaseReload)
-        throw new NotFoundException('Compra não encontrada após pagamento.');
-
-      const now = new Date();
-      const purchaseComputed = this.computePurchaseCacheFromInstallments({
-        totalCents: purchaseReload.totalCents,
-        installments: purchaseReload.installments.map((i) => ({
-          dueDate: i.dueDate,
-          amountCents: i.amountCents,
-          paidAmountCents: i.paidAmountCents,
-          paidAt: i.paidAt,
-        })),
-        now,
-      });
-
-      const purchaseUpdated = await tx.ownerFairPurchase.update({
-        where: { id: purchaseId },
-        data: {
-          paidCents: purchaseComputed.paidCents,
-          status: purchaseComputed.status,
-          paidAt: purchaseComputed.paidAt,
-        },
-      });
-
-      await this.audit.log(tx, {
-        action: AuditAction.CREATE,
-        entity: AuditEntity.OWNER_FAIR_PURCHASE_PAYMENT,
-        entityId: purchaseId,
-        actorUserId,
-        before: null,
-        after: {
-          payment,
-          installment: installmentUpdated,
-          purchase: purchaseUpdated,
-        },
-        meta: {
-          fairId,
-          ownerId,
-          ownerFairId: purchase.ownerFairId,
-          purchaseId,
-          installmentNumber,
-          action: 'CREATE_INSTALLMENT_PAYMENT',
-          paidAt: dto.paidAt,
-          amountCents: dto.amountCents,
-          note: dto.note ?? null,
-        },
-      });
-
-      // ✅ NOVO: se ficou 100% pago, recomputa status do OwnerFair (pendências -> concluído)
-      let ownerFairStatusInfo: any = null;
-      if (
-        this.shouldRecomputeOwnerFairAfterPurchaseUpdate({
-          totalCents: purchaseUpdated.totalCents,
-          paidCents: purchaseUpdated.paidCents,
-        })
-      ) {
-        ownerFairStatusInfo = await this.recomputeAndApplyOwnerFairStatus(
-          tx,
-          purchase.ownerFairId,
-          actorUserId,
-          {
-            trigger: 'CREATE_INSTALLMENT_PAYMENT',
-            purchaseId,
-            installmentNumber,
-          },
-        );
-      }
-
-      return {
-        ok: true,
-        purchaseId: purchaseUpdated.id,
-        purchaseStatus: purchaseUpdated.status,
-        purchaseTotalCents: purchaseUpdated.totalCents,
-        purchasePaidCents: purchaseUpdated.paidCents,
-        purchasePaidAt: purchaseUpdated.paidAt
-          ? purchaseUpdated.paidAt.toISOString()
-          : null,
-        installmentId: installmentUpdated.id,
-        installmentNumber: installmentUpdated.number,
-        installmentAmountCents: installmentUpdated.amountCents,
-        installmentPaidAmountCents: installmentUpdated.paidAmountCents ?? 0,
-        installmentPaidAt: installmentUpdated.paidAt
-          ? installmentUpdated.paidAt.toISOString()
-          : null,
-        installmentDueDate: installmentUpdated.dueDate.toISOString(),
-        // ✅ NOVO
-        ownerFairStatus: ownerFairStatusInfo?.status ?? null,
-        ownerFairStatusInfo,
-      };
-    });
   }
 
   /**

@@ -23,6 +23,7 @@ import { ExcelDatasetsModule } from './modules/excel-datasets/excel-datasets.mod
 import { ExcelExportRequirementsModule } from './modules/excel-export-requirements/excel-export-requirements.module';
 import { MapTemplatesModule } from './modules/map-templates/map-templates.module';
 import { FairMapsModule } from './modules/fair-maps/fair-maps.module';
+import { OwnerFairPurchaseModule } from './modules/owner-fair-purchase/owner-fair-purchase.module';
 
 @Global()
 @Module({
@@ -48,6 +49,7 @@ import { FairMapsModule } from './modules/fair-maps/fair-maps.module';
     ExcelExportRequirementsModule,
     MapTemplatesModule,
     FairMapsModule,
+    OwnerFairPurchaseModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
