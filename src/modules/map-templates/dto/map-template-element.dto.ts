@@ -15,7 +15,7 @@ import {
   ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { MapTemplateStyleDto } from './map-template-style.dto';
+import { MapElementStyleDto } from './map-template-style.dto';
 import { MapElementType } from '@prisma/client';
 
 /**
@@ -115,12 +115,12 @@ export class MapTemplateElementDto {
   radius?: number;
 
   @ApiProperty({
-    type: MapTemplateStyleDto,
+    type: MapElementStyleDto,
     description: 'Estilo básico do elemento (fill/stroke/strokeWidth/opacity).',
   })
   @ValidateNested()
-  @Type(() => MapTemplateStyleDto)
-  style!: MapTemplateStyleDto;
+  @Type(() => MapElementStyleDto)
+  style!: MapElementStyleDto;
 
   @ApiPropertyOptional({
     example: true,

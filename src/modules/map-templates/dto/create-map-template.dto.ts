@@ -4,71 +4,75 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  Max,
   Min,
   ValidateNested,
-  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { MapTemplateElementDto } from './map-template-element.dto';
+import { CreateMapTemplateElementDto } from './create-map-template-element.dto';
 
 /**
- * DTO de criação de uma Planta (MapTemplate).
- * Este endpoint cria o "template reutilizável" do layout do evento.
+ * CreateMapTemplateDto
+ *
+ * Representa o payload para criação de uma nova Planta (MapTemplate).
+ *
+ * Decisões de domínio:
+ * - O template pode ter 0 ou mais elementos.
+ * - worldWidth/worldHeight têm defaults no service se não forem enviados.
+ * - elements é obrigatório (mas pode ser []), para manter contrato explícito.
  */
 export class CreateMapTemplateDto {
   @ApiProperty({
-    example: 'Planta Praça Central - 2026',
-    description: 'Título amigável da planta (reutilizável entre feiras).',
+    example: 'Planta Principal 2026',
+    description: 'Título da planta.',
   })
   @IsString()
   title!: string;
 
   @ApiPropertyOptional({
-    example: 'Layout com palco, tendas e 40 slots de barracas.',
-    description: 'Descrição opcional para facilitar identificação.',
+    example: 'Layout oficial da feira gastronômica.',
+    description: 'Descrição opcional da planta.',
   })
   @IsOptional()
   @IsString()
-  description?: string;
+  description?: string | null;
 
   @ApiPropertyOptional({
-    example: '/maps/praca-central.png',
+    example: 'https://cdn.site.com/mapa.png',
     description:
-      'Referência opcional do background (não fazemos upload). Pode ser URL ou path conhecido pelo front.',
+      'URL opcional da imagem de fundo usada como referência visual.',
   })
   @IsOptional()
   @IsString()
-  backgroundUrl?: string;
+  backgroundUrl?: string | null;
 
   @ApiPropertyOptional({
     example: 2000,
-    description: 'Largura do mundo (coordenadas absolutas). Default: 2000.',
+    description:
+      'Largura base do mundo do mapa (em pixels). Default: 2000.',
   })
   @IsOptional()
   @IsInt()
-  @Min(200)
-  @Max(20000)
+  @Min(100)
   worldWidth?: number;
 
   @ApiPropertyOptional({
     example: 1200,
-    description: 'Altura do mundo (coordenadas absolutas). Default: 1200.',
+    description:
+      'Altura base do mundo do mapa (em pixels). Default: 1200.',
   })
   @IsOptional()
   @IsInt()
-  @Min(200)
-  @Max(20000)
+  @Min(100)
   worldHeight?: number;
 
   @ApiProperty({
-    type: [MapTemplateElementDto],
+    type: [CreateMapTemplateElementDto],
     description:
-      'Lista de elementos do desenho. Pode ser vazia para começar do zero.',
+      'Lista de elementos que compõem a planta (RECT, LINE, TREE, CIRCLE, BOOTH_SLOT etc).',
+    example: [],
   })
   @IsArray()
-  @ArrayMaxSize(5000)
   @ValidateNested({ each: true })
-  @Type(() => MapTemplateElementDto)
-  elements!: MapTemplateElementDto[];
+  @Type(() => CreateMapTemplateElementDto)
+  elements!: CreateMapTemplateElementDto[];
 }

@@ -3,40 +3,29 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { MapElementType, Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma/prisma.service";
-import { CreateMapTemplateDto } from "./dto/create-map-template.dto";
 import { UpdateMapTemplateDto } from "./dto/update-map-template.dto";
+import { CreateMapTemplateDto } from "./dto/create-map-template.dto";
 
 /**
  * MapTemplatesService
  *
- * Este service centraliza a regra de negócio das Plantas (templates reutilizáveis).
- *
- * Objetivos:
- * - Garantir que elementos salvos estejam consistentes por tipo (LINE, TREE, BOOTH_SLOT etc.)
- * - Evitar contratos implícitos: DTOs + validações claras
- * - Persistir os elementos de forma eficiente (createMany)
- *
- * Nota técnica importante (Prisma + JSON):
- * - Em createMany, o Prisma costuma exigir Prisma.InputJsonValue (e não JsonValue).
- * - Também é mais seguro usar `undefined` quando o JSON opcional não existe (ex.: points).
+ * Regras principais:
+ * - validação por tipo (LINE/TREE/CIRCLE/RECT/SQUARE/BOOTH_SLOT)
+ * - REPLACE de elements no update
  */
 @Injectable()
 export class MapTemplatesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Helper: converte um valor JS comum para InputJsonValue (quando existir).
-   * - Retornamos undefined quando valor é null/undefined para não "setar" o campo.
-   * - Isso evita conflito de typing com campos Json? em createMany.
-   */
   private toInputJson(value: unknown): Prisma.InputJsonValue | undefined {
     if (value === null || value === undefined) return undefined;
     return value as Prisma.InputJsonValue;
   }
 
   /**
-   * Valida coerência mínima dos elementos para evitar salvar estruturas inválidas.
-   * Mantemos validações objetivas e baratas, suficientes para estabilidade do dado.
+   * ✅ IMPORTANTE:
+   * O tipo correto aqui é o DTO de INPUT (CreateMapTemplateDto["elements"]),
+   * e NÃO um DTO de response.
    */
   private validateElements(elements: CreateMapTemplateDto["elements"]) {
     const seen = new Set<string>();
@@ -47,7 +36,6 @@ export class MapTemplatesService {
       }
       seen.add(el.clientKey);
 
-      // Regras por tipo
       if (el.type === MapElementType.LINE) {
         if (!el.points || el.points.length < 4 || el.points.length % 2 !== 0) {
           throw new BadRequestException(
@@ -60,6 +48,15 @@ export class MapTemplatesService {
         if (typeof el.radius !== "number" || el.radius <= 0) {
           throw new BadRequestException(
             `Elemento TREE (${el.clientKey}) precisa de radius > 0.`,
+          );
+        }
+      }
+
+      // ✅ NOVO: CIRCLE
+      if (el.type === MapElementType.CIRCLE) {
+        if (typeof el.radius !== "number" || el.radius <= 0) {
+          throw new BadRequestException(
+            `Elemento CIRCLE (${el.clientKey}) precisa de radius > 0.`,
           );
         }
       }
@@ -81,7 +78,6 @@ export class MapTemplatesService {
         }
       }
 
-      // Linkável: somente BOOTH_SLOT
       if (el.isLinkable && el.type !== MapElementType.BOOTH_SLOT) {
         throw new BadRequestException(
           `Somente BOOTH_SLOT pode ser isLinkable=true (clientKey=${el.clientKey}).`,
@@ -90,15 +86,10 @@ export class MapTemplatesService {
     }
   }
 
-  /**
-   * Cria um novo template e persiste os elementos em lote (createMany).
-   * Fazemos transaction para garantir consistência.
-   */
   async create(dto: CreateMapTemplateDto) {
     this.validateElements(dto.elements);
 
     const created = await this.prisma.$transaction(async (tx) => {
-      // 1) cria o template
       const tpl = await tx.mapTemplate.create({
         data: {
           title: dto.title,
@@ -109,12 +100,7 @@ export class MapTemplatesService {
         },
       });
 
-      // 2) cria elementos em lote (se houver)
       if (dto.elements.length) {
-        /**
-         * Tipamos explicitamente o array para o tipo do Prisma.
-         * Isso evita “briga” de inferência do TypeScript no createMany.
-         */
         const data: Prisma.MapTemplateElementCreateManyInput[] = dto.elements.map((el) => ({
           templateId: tpl.id,
           clientKey: el.clientKey,
@@ -131,9 +117,8 @@ export class MapTemplatesService {
 
           radius: el.radius ?? null,
 
-          // ✅ JSON: InputJsonValue + undefined quando não existir
           points: this.toInputJson(el.points),
-          style: this.toInputJson(el.style)!, // style é obrigatório no DTO
+          style: this.toInputJson(el.style)!,
 
           isLinkable: el.type === MapElementType.BOOTH_SLOT ? !!el.isLinkable : false,
         }));
@@ -141,7 +126,6 @@ export class MapTemplatesService {
         await tx.mapTemplateElement.createMany({ data });
       }
 
-      // 3) retorna com include de elements
       return tx.mapTemplate.findUnique({
         where: { id: tpl.id },
         include: { elements: true },
@@ -151,9 +135,6 @@ export class MapTemplatesService {
     return created;
   }
 
-  /**
-   * Lista templates (ordenado por updatedAt desc).
-   */
   async list() {
     return this.prisma.mapTemplate.findMany({
       orderBy: { updatedAt: "desc" },
@@ -161,9 +142,6 @@ export class MapTemplatesService {
     });
   }
 
-  /**
-   * Retorna um template por id.
-   */
   async getById(id: string) {
     const tpl = await this.prisma.mapTemplate.findUnique({
       where: { id },
@@ -174,13 +152,6 @@ export class MapTemplatesService {
     return tpl;
   }
 
-  /**
-   * Atualiza template.
-   *
-   * Estratégia:
-   * - Se vier `elements`, fazemos REPLACE (apaga e recria) e incrementa version.
-   * - Isso simplifica o fluxo do editor no front e evita merges complexos agora.
-   */
   async update(id: string, dto: UpdateMapTemplateDto) {
     await this.getById(id);
 
@@ -189,7 +160,6 @@ export class MapTemplatesService {
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      // Se for replace de elements: remove tudo e recria
       if (dto.elements) {
         await tx.mapTemplateElement.deleteMany({ where: { templateId: id } });
 
@@ -210,7 +180,6 @@ export class MapTemplatesService {
 
             radius: el.radius ?? null,
 
-            // ✅ JSON: InputJsonValue + undefined quando não existir
             points: this.toInputJson(el.points),
             style: this.toInputJson(el.style)!,
 
@@ -221,7 +190,6 @@ export class MapTemplatesService {
         }
       }
 
-      // Atualiza campos do template
       const tpl = await tx.mapTemplate.update({
         where: { id },
         data: {
@@ -230,13 +198,10 @@ export class MapTemplatesService {
           backgroundUrl: dto.backgroundUrl ?? undefined,
           worldWidth: dto.worldWidth ?? undefined,
           worldHeight: dto.worldHeight ?? undefined,
-
-          // Incrementa version apenas quando houve replace de elements
           version: dto.elements ? { increment: 1 } : undefined,
         },
       });
 
-      // Retorna com include
       return tx.mapTemplate.findUnique({
         where: { id: tpl.id },
         include: { elements: true },
@@ -246,15 +211,8 @@ export class MapTemplatesService {
     return updated;
   }
 
-  /**
-   * Exclui template.
-   *
-   * Observação:
-   * - Futuro: impedir delete se estiver em uso por FairMap (quando criarmos fair-maps).
-   */
   async delete(id: string) {
     await this.getById(id);
-
     await this.prisma.mapTemplate.delete({ where: { id } });
     return { ok: true };
   }

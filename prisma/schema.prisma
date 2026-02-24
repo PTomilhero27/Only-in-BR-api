@@ -155,12 +155,13 @@ enum ExcelTemplateScope {
 }
 
 enum MapElementType {
-  BOOTH_SLOT // slot de barraca (único linkável)
+  BOOTH_SLOT
   RECT
   SQUARE
   LINE
   TEXT
   TREE
+  CIRCLE
 }
 
 model User {
