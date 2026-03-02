@@ -144,6 +144,8 @@ enum ExcelDataset {
   OWNER_FAIRS_LIST
   OWNER_STALLS_LIST
   STALL_FAIRS_LIST
+
+  FAIR_MENU_PRODUCTS_LIST
 }
 
 enum ExcelTemplateScope {

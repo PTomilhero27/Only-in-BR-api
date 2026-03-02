@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { ExcelDataset, ExcelValueFormat } from '@prisma/client';
 import {
   ExcelDatasetDefinition,
@@ -712,6 +713,42 @@ export function buildExcelDatasetDefinitions(
           'Precisa de gás',
           ExcelValueFormat.BOOL,
           'Infra',
+        ),
+      ],
+    },
+
+    {
+      dataset: ExcelDataset.FAIR_MENU_PRODUCTS_LIST,
+      label: 'Lista: Produtos do cardápio (por feira)',
+      scope: [
+        { key: 'fairId', label: 'Feira', type: 'UUID', required: true },
+        {
+          key: 'ownerId',
+          label: 'Expositor (opcional)',
+          type: 'CUID',
+          required: false,
+        },
+      ],
+      fields: [
+        field(
+          'owner.fullName',
+          'Dono / Expositor',
+          ExcelValueFormat.TEXT,
+          'Expositor',
+        ),
+        field(
+          'stall.pdvName',
+          'Barraca (PDV)',
+          ExcelValueFormat.TEXT,
+          'Barraca',
+        ),
+        field('category.name', 'Categoria', ExcelValueFormat.TEXT, 'Cardápio'),
+        field('product.name', 'Produto', ExcelValueFormat.TEXT, 'Cardápio'),
+        field(
+          'product.priceCents',
+          'Preço (centavos)',
+          ExcelValueFormat.MONEY_CENTS,
+          'Cardápio',
         ),
       ],
     },
