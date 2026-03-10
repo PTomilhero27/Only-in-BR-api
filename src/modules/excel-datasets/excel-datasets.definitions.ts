@@ -462,9 +462,6 @@ export function buildExcelDatasetDefinitions(
     // =========================
     // MULTI — FAIR STALLS
     // =========================
-    // =========================
-    // MULTI — FAIR STALLS
-    // =========================
     {
       dataset: ExcelDataset.FAIR_STALLS_LIST,
       label: 'Lista: Barracas da feira',
