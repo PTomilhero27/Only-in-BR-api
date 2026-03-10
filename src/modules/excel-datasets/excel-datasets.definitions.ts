@@ -462,6 +462,9 @@ export function buildExcelDatasetDefinitions(
     // =========================
     // MULTI — FAIR STALLS
     // =========================
+    // =========================
+    // MULTI — FAIR STALLS
+    // =========================
     {
       dataset: ExcelDataset.FAIR_STALLS_LIST,
       label: 'Lista: Barracas da feira',
@@ -506,11 +509,66 @@ export function buildExcelDatasetDefinitions(
         ),
         field('stall.teamQty', 'Qtd. equipe', ExcelValueFormat.INT, 'Operação'),
 
+        // =========================
+        // INFRA / ELÉTRICA / GÁS
+        // =========================
+        field(
+          'powerNeed.outlets110',
+          'Tomadas 110v',
+          ExcelValueFormat.INT,
+          'Infra',
+        ),
+        field(
+          'powerNeed.outlets220',
+          'Tomadas 220v',
+          ExcelValueFormat.INT,
+          'Infra',
+        ),
+        field(
+          'powerNeed.outletsOther',
+          'Outras tomadas',
+          ExcelValueFormat.INT,
+          'Infra',
+        ),
         field(
           'powerNeed.needsGas',
           'Precisa de gás',
           ExcelValueFormat.BOOL,
           'Infra',
+        ),
+        field(
+          'powerNeed.gasNotes',
+          'Observações do gás',
+          ExcelValueFormat.TEXT,
+          'Infra',
+        ),
+        field(
+          'powerNeed.notes',
+          'Observações elétricas',
+          ExcelValueFormat.TEXT,
+          'Infra',
+        ),
+
+        // =========================
+        // EQUIPAMENTOS
+        // =========================
+        field(
+          'stall.equipmentsCount',
+          'Qtd. tipos de equipamentos',
+          ExcelValueFormat.INT,
+          'Equipamentos',
+        ),
+        field(
+          'stall.equipmentsTotalQty',
+          'Qtd. total de equipamentos',
+          ExcelValueFormat.INT,
+          'Equipamentos',
+        ),
+        field(
+          'stall.equipmentsSummaryText',
+          'Equipamentos',
+          ExcelValueFormat.TEXT,
+          'Equipamentos',
         ),
 
         field(

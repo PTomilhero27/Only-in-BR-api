@@ -14,30 +14,36 @@ import { CreateExcelExportDto } from './dto/create-excel-export.dto';
 /**
  * ✅ ExcelExportsService
  *
- * Responsabilidade:
- * - Carregar template (sheets/cells/tables/columns)
- * - Carregar dados do banco conforme scope
- * - Montar ctx.root + ctx.lists
- * - Delegar pro ExcelGeneratorService
+ * Esta service é responsável por:
+ * - Carregar o template de exportação do Excel
+ * - Buscar os dados necessários no banco
+ * - Montar o contexto consumido pelo gerador
+ * - Delegar a geração do arquivo XLSX para o ExcelGeneratorService
  *
- * Observação importante (novidade):
- * - Para exportar "Cardápio (Produtos)" em formato de tabela (1 linha por produto),
- *   precisamos de um dataset MULTI "flatten" por feira:
- *   ✅ ExcelDataset.FAIR_MENU_PRODUCTS_LIST
- *
- * Requisitos para funcionar:
- * - Enum ExcelDataset no Prisma DEVE incluir FAIR_MENU_PRODUCTS_LIST
- * - O registry (buildExcelDatasetDefinitions) DEVE expor os fields:
- *   stall.pdvName, owner.fullName, category.name, product.name, product.priceCents
+ * Observação:
+ * - Apesar do fluxo "baixar arquivo" acontecer no front/controller,
+ *   esta service apenas gera o buffer + filename do Excel.
+ * - Aqui adicionamos também os dados de infraestrutura da barraca
+ *   (equipamentos, tomadas, gás e observações operacionais).
  */
 @Injectable()
 export class ExcelExportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly excelGenerator: ExcelGeneratorService,
-    private readonly excelDatasets: ExcelDatasetsService, // ✅ registry oficial
+    private readonly excelDatasets: ExcelDatasetsService,
   ) {}
 
+  /**
+   * Gera o arquivo XLSX com base no template e no escopo informado.
+   *
+   * Responsabilidades:
+   * - Validar escopo mínimo
+   * - Carregar dados da feira
+   * - Carregar expositores e barracas vinculadas
+   * - Montar datasets SINGLE e MULTI
+   * - Retornar buffer + nome do arquivo
+   */
   async generate(dto: CreateExcelExportDto): Promise<{
     filename: string;
     buffer: Buffer;
@@ -45,14 +51,19 @@ export class ExcelExportsService {
     const { templateId, scope } = dto;
     const { fairId, ownerId } = scope;
 
-    // ✅ MVP: sempre por feira
+    // No MVP atual, toda exportação depende de uma feira.
     if (!fairId) {
       throw new BadRequestException('scope.fairId é obrigatório no MVP.');
     }
 
     /**
-     * 1) Carrega o template completo (abas + cells + tables + columns)
-     * - O generator depende desse shape para renderizar o workbook.
+     * 1) Carrega o template completo
+     *
+     * O gerador precisa receber:
+     * - abas
+     * - células fixas
+     * - tabelas
+     * - colunas das tabelas
      */
     const template = await this.prisma.excelTemplate.findUnique({
       where: { id: templateId },
@@ -70,7 +81,10 @@ export class ExcelExportsService {
       },
     });
 
-    if (!template) throw new NotFoundException('Template não encontrado.');
+    if (!template) {
+      throw new NotFoundException('Template não encontrado.');
+    }
+
     if (template.status !== ExcelTemplateStatus.ACTIVE) {
       throw new BadRequestException(
         'Template está INATIVO e não pode ser exportado.',
@@ -78,8 +92,10 @@ export class ExcelExportsService {
     }
 
     /**
-     * 2) Carrega a feira base (root.fair.*)
-     * - Mantemos select enxuto por performance.
+     * 2) Carrega a feira base
+     *
+     * Mantemos o select enxuto porque os dados derivados
+     * serão calculados aqui na própria service.
      */
     const fair = await this.prisma.fair.findUnique({
       where: { id: fairId },
@@ -92,11 +108,15 @@ export class ExcelExportsService {
       },
     });
 
-    if (!fair) throw new NotFoundException('Feira não encontrada.');
+    if (!fair) {
+      throw new NotFoundException('Feira não encontrada.');
+    }
 
     /**
-     * 3) Expositores (OwnerFair + Owner + Purchases + Installments)
-     * - Esta lista alimenta FAIR_EXHIBITORS_LIST
+     * 3) Carrega os expositores vinculados à feira
+     *
+     * Esta estrutura alimenta principalmente o dataset:
+     * - FAIR_EXHIBITORS_LIST
      */
     const ownerFairs = await this.prisma.ownerFair.findMany({
       where: {
@@ -113,14 +133,15 @@ export class ExcelExportsService {
     });
 
     /**
-     * 4) Barracas da feira (StallFair + Stall + Owner + Purchase)
-     * - Esta lista alimenta:
-     *   - FAIR_STALLS_LIST (lista de barracas)
-     *   - FAIR_MENU_PRODUCTS_LIST (lista flatten de produtos do cardápio)
+     * 4) Carrega as barracas vinculadas à feira
      *
-     * ✅ Importante:
-     * - Precisamos incluir menuCategories/products para gerar a planilha de cardápio.
-     * - Mantemos orderBy para export previsível.
+     * Esta estrutura alimenta:
+     * - FAIR_STALLS_LIST
+     * - FAIR_MENU_PRODUCTS_LIST
+     *
+     * Importante:
+     * - Incluímos menuCategories/products para exportar cardápio
+     * - Incluímos powerNeed e equipments para exportar infraestrutura
      */
     const stallFairs = await this.prisma.stallFair.findMany({
       where: {
@@ -130,7 +151,9 @@ export class ExcelExportsService {
       include: {
         stall: {
           include: {
-            // ✅ Cardápio
+            /**
+             * Cardápio da barraca
+             */
             menuCategories: {
               orderBy: { order: 'asc' },
               include: {
@@ -138,8 +161,17 @@ export class ExcelExportsService {
               },
             },
 
-            // ⚠️ Se você quiser exportar infra:
-            // powerNeed: true,
+            /**
+             * Infraestrutura elétrica/gás da barraca
+             */
+            powerNeed: true,
+
+            /**
+             * Equipamentos informados pela barraca
+             */
+            equipments: {
+              orderBy: { name: 'asc' },
+            },
           },
         },
         ownerFair: { include: { owner: true } },
@@ -149,10 +181,11 @@ export class ExcelExportsService {
     });
 
     /**
-     * 5) KPIs básicos (root.fair.*)
-     * - Reservadas: soma de OwnerFair.stallsQty
-     * - Vinculadas: StallFair reais
-     * - Disponíveis: capacity - reserved
+     * 5) KPIs básicos da feira
+     *
+     * Reservadas: soma do que foi comprado/reservado
+     * Vinculadas: barracas já efetivamente ligadas na feira
+     * Disponíveis: capacidade restante
      */
     const stallsReserved = ownerFairs.reduce(
       (acc, of) => acc + (of.stallsQty ?? 0),
@@ -162,13 +195,26 @@ export class ExcelExportsService {
     const stallsRemaining = Math.max(0, fair.stallsCapacity - stallsReserved);
 
     /**
-     * 6) Monta o ctx consumido pelo ExcelGeneratorService
-     * - root: dados únicos para binds SINGLE (ex.: fair.name)
-     * - lists: dados MULTI (tabelas/listas)
+     * Helper interno para transformar a lista de equipamentos
+     * em um texto legível na exportação.
      *
-     * Observação:
-     * - Mesmo que um template use somente um dataset, é ok preencher outros.
-     * - O generator simplesmente ignora o que não for usado.
+     * Exemplo:
+     * "Freezer x2, Chapa x1, Fritadeira x1"
+     */
+    const buildEquipmentsSummaryText = (
+      equipments: Array<{ name: string; qty: number }>,
+    ): string => {
+      if (!equipments.length) return '';
+
+      return equipments.map((item) => `${item.name} x${item.qty}`).join(', ');
+    };
+
+    /**
+     * 6) Monta o contexto consumido pelo ExcelGeneratorService
+     *
+     * Estrutura:
+     * - root  => binds únicos (SINGLE)
+     * - lists => tabelas/listas (MULTI)
      */
     const ctx: ExcelContext = {
       root: {
@@ -187,8 +233,8 @@ export class ExcelExportsService {
       lists: {
         /**
          * ✅ FAIR_EXHIBITORS_LIST
-         * - Retorna uma linha por expositor (OwnerFair)
-         * - Calcula resumo financeiro via purchases
+         *
+         * Retorna uma linha por expositor vinculado à feira.
          */
         [ExcelDataset.FAIR_EXHIBITORS_LIST]: ownerFairs.map((of) => {
           const totalCents = of.ownerFairPurchases.reduce(
@@ -235,15 +281,19 @@ export class ExcelExportsService {
 
         /**
          * ✅ FAIR_STALLS_LIST
-         * - Retorna uma linha por barraca vinculada na feira (StallFair)
-         * - Observação: aqui NÃO “explode” cardápio. É “lista de barracas”.
+         *
+         * Retorna uma linha por barraca vinculada na feira.
+         *
+         * Além dos dados básicos da barraca, agora também levamos:
+         * - resumo do cardápio
+         * - infraestrutura elétrica/gás
+         * - resumo de equipamentos
          */
         [ExcelDataset.FAIR_STALLS_LIST]: stallFairs.map((sf) => {
-          // ✅ Resumos do cardápio (ajuda em relatórios sem precisar explodir produtos)
           const menuCategoriesCount = sf.stall.menuCategories?.length ?? 0;
           const menuProductsCount =
             sf.stall.menuCategories?.reduce(
-              (acc, c) => acc + (c.products?.length ?? 0),
+              (acc, category) => acc + (category.products?.length ?? 0),
               0,
             ) ?? 0;
 
@@ -251,8 +301,19 @@ export class ExcelExportsService {
             menuCategoriesCount === 0
               ? ''
               : (sf.stall.menuCategories ?? [])
-                  .map((c) => `${c.name}: ${c.products?.length ?? 0}`)
+                  .map(
+                    (category) =>
+                      `${category.name}: ${category.products?.length ?? 0}`,
+                  )
                   .join(' | ');
+
+          const equipments = sf.stall.equipments ?? [];
+          const equipmentsCount = equipments.length;
+          const equipmentsTotalQty = equipments.reduce(
+            (acc, item) => acc + (item.qty ?? 0),
+            0,
+          );
+          const equipmentsSummaryText = buildEquipmentsSummaryText(equipments);
 
           return {
             stall: {
@@ -265,13 +326,34 @@ export class ExcelExportsService {
               machinesQty: sf.stall.machinesQty,
               teamQty: sf.stall.teamQty,
 
-              // ✅ Cardápio (resumo)
+              /**
+               * Resumo do cardápio
+               */
               menuCategoriesCount,
               menuProductsCount,
               menuSummaryText,
 
-              // ⚠️ Infra exemplo (se incluir powerNeed):
-              // powerNeed: { needsGas: sf.stall.powerNeed?.needsGas ?? false },
+              /**
+               * Resumo dos equipamentos
+               */
+              equipmentsCount,
+              equipmentsTotalQty,
+              equipmentsSummaryText,
+            },
+
+            /**
+             * Infraestrutura elétrica e operacional
+             *
+             * Mantemos separado em powerNeed para o catálogo de fields
+             * continuar previsível e sem contratos implícitos.
+             */
+            powerNeed: {
+              outlets110: sf.stall.powerNeed?.outlets110 ?? 0,
+              outlets220: sf.stall.powerNeed?.outlets220 ?? 0,
+              outletsOther: sf.stall.powerNeed?.outletsOther ?? 0,
+              needsGas: sf.stall.powerNeed?.needsGas ?? false,
+              gasNotes: sf.stall.powerNeed?.gasNotes ?? '',
+              notes: sf.stall.powerNeed?.notes ?? '',
             },
 
             owner: {
@@ -295,30 +377,27 @@ export class ExcelExportsService {
         }),
 
         /**
-         * ✅ FAIR_MENU_PRODUCTS_LIST (NOVO)
+         * ✅ FAIR_MENU_PRODUCTS_LIST
          *
-         * Objetivo:
-         * - Gerar 1 linha por produto do cardápio,
-         *   incluindo PDV da barraca + nome do dono.
-         *
-         * Isso atende a planilha:
-         * - PDV | Nome do produto | Preço | Dono
-         *
-         * Importante:
-         * - Só entram produtos de barracas efetivamente vinculadas na feira (StallFair).
-         * - Se uma barraca não tem cardápio, ela não gera linhas.
+         * Retorna uma linha por produto do cardápio,
+         * considerando apenas barracas efetivamente vinculadas à feira.
          */
         [ExcelDataset.FAIR_MENU_PRODUCTS_LIST]: stallFairs.flatMap((sf) => {
           const owner = sf.ownerFair.owner;
-
           const categories = sf.stall.menuCategories ?? [];
-          if (categories.length === 0) return [];
 
-          return categories.flatMap((cat) => {
-            const products = cat.products ?? [];
-            if (products.length === 0) return [];
+          if (categories.length === 0) {
+            return [];
+          }
 
-            return products.map((prod) => ({
+          return categories.flatMap((category) => {
+            const products = category.products ?? [];
+
+            if (products.length === 0) {
+              return [];
+            }
+
+            return products.map((product) => ({
               stall: {
                 id: sf.stall.id,
                 pdvName: sf.stall.pdvName,
@@ -328,15 +407,15 @@ export class ExcelExportsService {
                 fullName: owner.fullName ?? '',
               },
               category: {
-                id: cat.id,
-                name: cat.name,
-                order: cat.order,
+                id: category.id,
+                name: category.name,
+                order: category.order,
               },
               product: {
-                id: prod.id,
-                name: prod.name,
-                priceCents: prod.priceCents,
-                order: prod.order,
+                id: product.id,
+                name: product.name,
+                priceCents: product.priceCents,
+                order: product.order,
               },
             }));
           });
@@ -345,8 +424,12 @@ export class ExcelExportsService {
     };
 
     /**
-     * 7) Gera o buffer do XLSX (ExcelJS por baixo)
-     * - O generator recebe: template + ctx + registry (catálogo de binds)
+     * 7) Gera o buffer do arquivo XLSX
+     *
+     * O ExcelGeneratorService recebe:
+     * - template
+     * - contexto com os dados
+     * - registry oficial com os binds disponíveis
      */
     const buffer = await this.excelGenerator.generateXlsxBuffer({
       template,
@@ -355,8 +438,9 @@ export class ExcelExportsService {
     });
 
     /**
-     * 8) Nome do arquivo
-     * - Sanitiza para evitar caracteres inválidos em Windows.
+     * 8) Monta nome seguro do arquivo
+     *
+     * Sanitizamos o nome da feira para evitar caracteres inválidos.
      */
     const safeName = fair.name.replace(/[^\w\d-]+/g, '-').slice(0, 40);
     const filename = ownerId
