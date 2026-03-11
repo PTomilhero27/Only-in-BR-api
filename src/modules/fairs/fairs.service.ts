@@ -61,15 +61,20 @@ export class FairsService {
   // ---------------------------------------------------------
 
   /**
-   * Aplica alterações nas taxas (% sobre vendas) com base no "estado final" enviado pelo front.
+   * Aplica alterações nas taxas da feira com base no estado final enviado pelo front.
    *
    * Regras:
-   * - id ausente => cria taxa
-   * - id presente => atualiza taxa (somente se NÃO estiver em uso em OwnerFairPurchase)
-   * - taxa existente que não vier na lista => tenta excluir (somente se NÃO estiver em uso)
+   * - id ausente => cria
+   * - id presente => atualiza
+   * - taxa existente ausente no payload => exclui
    *
-   * Por que assim:
-   * - O front manda a lista final, e o backend faz o diff de forma determinística.
+   * Restrições:
+   * - Não permite editar/excluir taxa que já esteja em uso em StallFair.
+   *
+   * Decisão:
+   * - A taxa operacional é vinculada à barraca da feira (StallFair.taxId),
+   *   e não diretamente à compra (OwnerFairPurchase).
+   * - Por isso a validação de uso consulta StallFair.
    */
   private async applyFairTaxesUpdate(
     tx: any,
@@ -86,7 +91,6 @@ export class FairsService {
 
     const incomingWithId = incoming.filter((t) => !!t.id);
     const incomingIds = new Set(incomingWithId.map((t) => t.id!));
-
     const incomingById = new Map(incomingWithId.map((t) => [t.id!, t]));
 
     const toDelete = existing.filter((t) => !incomingIds.has(t.id));
@@ -99,23 +103,25 @@ export class FairsService {
 
     const toCreate = incoming.filter((t) => !t.id);
 
+    /**
+     * Verifica se a taxa já está em uso em alguma barraca vinculada à feira.
+     */
     const isTaxInUse = async (taxId: string) => {
-      const usedCount = await tx.ownerFairPurchase.count({
-        where: { taxId }, // ✅ se no seu schema for feeId, trocar aqui
+      const usedCount = await tx.stallFair.count({
+        where: { taxId },
       });
+
       return usedCount > 0;
     };
 
-    // 1) bloquear deletes em uso
     for (const t of toDelete) {
       if (await isTaxInUse(t.id)) {
         throw new ConflictException(
-          `Não é possível excluir a taxa "${t.name}" pois ela já está sendo usada em compras de barraca.`,
+          `Não é possível excluir a taxa "${t.name}" pois ela já está sendo usada em barracas da feira.`,
         );
       }
     }
 
-    // 2) bloquear updates em uso (apenas se alterar algo)
     for (const u of toUpdate) {
       const changed =
         u.before.name !== u.next.name ||
@@ -125,19 +131,17 @@ export class FairsService {
 
       if (await isTaxInUse(u.before.id)) {
         throw new ConflictException(
-          `Não é possível editar a taxa "${u.before.name}" pois ela já está sendo usada em compras de barraca.`,
+          `Não é possível editar a taxa "${u.before.name}" pois ela já está sendo usada em barracas da feira.`,
         );
       }
     }
 
-    // 3) aplicar deletes
     if (toDelete.length) {
       await tx.fairTax.deleteMany({
         where: { id: { in: toDelete.map((t) => t.id) } },
       });
     }
 
-    // 4) aplicar updates
     for (const u of toUpdate) {
       await tx.fairTax.update({
         where: { id: u.before.id },
@@ -148,7 +152,6 @@ export class FairsService {
       });
     }
 
-    // 5) aplicar creates
     if (toCreate.length) {
       await tx.fairTax.createMany({
         data: toCreate.map((t) => ({

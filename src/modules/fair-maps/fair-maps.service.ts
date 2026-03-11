@@ -22,6 +22,12 @@ import { FairMapAvailableStallFairDto } from './dto/fair-map-available-stall-fai
  * Decisão importante:
  * - O template guarda o desenho (elementos).
  * - A feira guarda somente o vínculo (slotClientKey -> stallFairId).
+ *
+ * Ajuste importante desta versão:
+ * - Sempre sincronizamos os links com os slots realmente existentes
+ *   no template atual.
+ * - Isso evita sobras quando um slot é removido, recriado ou deixa de
+ *   ser linkável no editor da planta.
  */
 @Injectable()
 export class FairMapsService {
@@ -38,8 +44,84 @@ export class FairMapsService {
       where: { id: templateId },
       include: { elements: true },
     });
-    if (!tpl) throw new NotFoundException('Planta (template) não encontrada.');
+
+    if (!tpl) {
+      throw new NotFoundException('Planta (template) não encontrada.');
+    }
+
     return tpl;
+  }
+
+  /**
+   * Remove vínculos inválidos para o template atual da feira.
+   *
+   * Casos limpos aqui:
+   * - slotClientKey não existe mais no template
+   * - elemento existe, mas não é BOOTH_SLOT
+   * - elemento existe, mas não é linkável
+   * - vínculo aponta para StallFair que não pertence mais à feira
+   *
+   * Essa limpeza é essencial porque o template pode ser editado depois
+   * de já existirem vínculos salvos.
+   */
+  private async syncInvalidLinksWithCurrentTemplate(fairId: string) {
+    const fairMap = await this.prisma.fairMap.findUnique({
+      where: { fairId },
+      include: {
+        template: {
+          include: {
+            elements: true,
+          },
+        },
+        links: {
+          include: {
+            stallFair: {
+              select: {
+                id: true,
+                fairId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!fairMap) {
+      throw new NotFoundException(
+        'Esta feira ainda não possui uma planta vinculada.',
+      );
+    }
+
+    const validSlotKeys = new Set(
+      fairMap.template.elements
+        .filter(
+          (el) =>
+            el.type === MapElementType.BOOTH_SLOT && Boolean(el.isLinkable),
+        )
+        .map((el) => el.clientKey),
+    );
+
+    const invalidLinkIds = fairMap.links
+      .filter((link) => {
+        const slotStillExists = validSlotKeys.has(link.slotClientKey);
+        const stallFairBelongsToFair =
+          !!link.stallFair && link.stallFair.fairId === fairId;
+
+        return !slotStillExists || !stallFairBelongsToFair;
+      })
+      .map((link) => link.id);
+
+    if (invalidLinkIds.length > 0) {
+      await this.prisma.fairMapBoothLink.deleteMany({
+        where: {
+          id: {
+            in: invalidLinkIds,
+          },
+        },
+      });
+    }
+
+    return fairMap.id;
   }
 
   /**
@@ -47,7 +129,9 @@ export class FairMapsService {
    *
    * Estratégia:
    * - Upsert de FairMap por fairId.
-   * - Se trocar template, limpamos links antigos (slotClientKey antigo pode não existir).
+   * - Se trocar template, limpamos todos os links antigos.
+   * - Mesmo sem trocar template, executamos sincronização ao final,
+   *   pois o template pode ter sido editado desde o último vínculo.
    */
   async setTemplate(fairId: string, dto: SetFairMapTemplateDto) {
     await this.ensureFairExists(fairId);
@@ -72,10 +156,22 @@ export class FairMapsService {
         },
       });
 
+      /**
+       * Se houve troca de template, limpamos tudo porque os slots
+       * do template anterior não fazem mais sentido.
+       */
       if (existing && existing.templateId !== tpl.id) {
-        await tx.fairMapBoothLink.deleteMany({ where: { fairMapId: fm.id } });
+        await tx.fairMapBoothLink.deleteMany({
+          where: { fairMapId: fm.id },
+        });
       }
     });
+
+    /**
+     * Mesmo mantendo o mesmo template, garantimos que os vínculos
+     * continuam compatíveis com os slots atuais.
+     */
+    await this.syncInvalidLinksWithCurrentTemplate(fairId);
 
     return this.getFairMap(fairId);
   }
@@ -85,22 +181,35 @@ export class FairMapsService {
    * - template + elements
    * - links (slotClientKey -> stallFairId)
    *
-   * ✅ Agora também retorna um resumo “stallFair” em cada link,
-   * para o front renderizar o modal sem precisar de outra API.
+   * Também devolve um resumo de StallFair para o modal operacional do front.
+   *
+   * Ajuste importante:
+   * - Antes de retornar, sincronizamos e removemos vínculos inválidos.
+   * - Assim o front recebe apenas links que realmente existem no template atual.
    */
   async getFairMap(fairId: string) {
     await this.ensureFairExists(fairId);
 
+    await this.syncInvalidLinksWithCurrentTemplate(fairId);
+
     const fairMap = await this.prisma.fairMap.findUnique({
       where: { fairId },
       include: {
-        template: { include: { elements: true } },
+        template: {
+          include: {
+            elements: true,
+          },
+        },
         links: {
           include: {
             stallFair: {
               include: {
                 stall: true,
-                ownerFair: { include: { owner: true } },
+                ownerFair: {
+                  include: {
+                    owner: true,
+                  },
+                },
               },
             },
           },
@@ -113,6 +222,24 @@ export class FairMapsService {
         'Esta feira ainda não possui uma planta vinculada. Use PUT /fairs/:fairId/map.',
       );
     }
+
+    /**
+     * Por segurança extra, filtramos novamente em memória os links
+     * para garantir que o retorno do front só contenha slots válidos.
+     */
+    const validSlotKeys = new Set(
+      fairMap.template.elements
+        .filter(
+          (el) =>
+            el.type === MapElementType.BOOTH_SLOT && Boolean(el.isLinkable),
+        )
+        .map((el) => el.clientKey),
+    );
+
+    const validLinks = fairMap.links.filter(
+      (l) =>
+        validSlotKeys.has(l.slotClientKey) && l.stallFair?.fairId === fairId,
+    );
 
     return {
       fairId,
@@ -140,7 +267,7 @@ export class FairMapsService {
           isLinkable: el.isLinkable,
         })),
       },
-      links: fairMap.links.map((l) => ({
+      links: validLinks.map((l) => ({
         slotClientKey: l.slotClientKey,
         stallFairId: l.stallFairId,
         stallFair: {
@@ -157,12 +284,18 @@ export class FairMapsService {
   /**
    * Lista StallFairs “disponíveis” para vínculo no mapa:
    * - pertencem à feira
-   * - e ainda NÃO estão vinculadas a nenhum slot (FairMapBoothLink)
+   * - e ainda NÃO estão vinculadas a nenhum slot válido
+   *
+   * Ajuste:
+   * - sincronizamos os links antes da listagem para não bloquear
+   *   barracas por causa de vínculo órfão.
    */
   async listAvailableStallFairs(
     fairId: string,
   ): Promise<FairMapAvailableStallFairDto[]> {
     await this.ensureFairExists(fairId);
+
+    await this.syncInvalidLinksWithCurrentTemplate(fairId);
 
     const fairMap = await this.prisma.fairMap.findUnique({
       where: { fairId },
@@ -186,7 +319,11 @@ export class FairMapsService {
       where: { fairId },
       include: {
         stall: true,
-        ownerFair: { include: { owner: true } },
+        ownerFair: {
+          include: {
+            owner: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -207,15 +344,23 @@ export class FairMapsService {
    *
    * Regras:
    * - O slot precisa existir no template atual e ser BOOTH_SLOT com isLinkable=true.
-   * - A StallFair precisa pertencer à mesma feira (stallFair.fairId === fairId).
-   * - `@@unique([fairMapId, stallFairId])` impede a mesma barraca em 2 slots.
+   * - A StallFair precisa pertencer à mesma feira.
+   * - Se o slot não existir mais, a própria sincronização anterior já limpa o link antigo.
    */
   async linkSlot(fairId: string, slotClientKey: string, dto: LinkBoothSlotDto) {
     await this.ensureFairExists(fairId);
 
+    await this.syncInvalidLinksWithCurrentTemplate(fairId);
+
     const fairMap = await this.prisma.fairMap.findUnique({
       where: { fairId },
-      include: { template: { include: { elements: true } } },
+      include: {
+        template: {
+          include: {
+            elements: true,
+          },
+        },
+      },
     });
 
     if (!fairMap) {
@@ -240,29 +385,48 @@ export class FairMapsService {
 
     const stallFairId = dto.stallFairId ?? null;
 
-    // Remover vínculo
+    /**
+     * Remover vínculo explicitamente.
+     */
     if (!stallFairId) {
       await this.prisma.fairMapBoothLink.deleteMany({
-        where: { fairMapId: fairMap.id, slotClientKey },
+        where: {
+          fairMapId: fairMap.id,
+          slotClientKey,
+        },
       });
+
       return this.getFairMap(fairId);
     }
 
-    // ✅ Validação forte: StallFair pertence à feira
+    /**
+     * Validação forte: a barraca precisa existir e pertencer à feira atual.
+     */
     const stallFair = await this.prisma.stallFair.findUnique({
       where: { id: stallFairId },
-      select: { id: true, fairId: true },
+      select: {
+        id: true,
+        fairId: true,
+      },
     });
 
-    if (!stallFair) throw new BadRequestException('StallFair inválida.');
+    if (!stallFair) {
+      throw new BadRequestException('StallFair inválida.');
+    }
+
     if (stallFair.fairId !== fairId) {
       throw new BadRequestException('Esta barraca não pertence a esta feira.');
     }
 
-    // Upsert do vínculo por slot
+    /**
+     * Garantimos 1 slot -> 1 barraca.
+     */
     await this.prisma.fairMapBoothLink.upsert({
       where: {
-        fairMapId_slotClientKey: { fairMapId: fairMap.id, slotClientKey },
+        fairMapId_slotClientKey: {
+          fairMapId: fairMap.id,
+          slotClientKey,
+        },
       },
       create: {
         fairMapId: fairMap.id,
