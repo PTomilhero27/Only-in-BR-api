@@ -732,11 +732,18 @@ export function buildExcelDatasetDefinitions(
       label: 'Lista: Barracas do expositor',
       scope: [
         {
-          key: 'ownerId',
-          label: 'Expositor',
-          type: 'CUID',
+          key: 'fairId',
+          label: 'Feira',
+          type: 'UUID',
           required: true,
-          hint: 'Obrigatório: lista de barracas do expositor.',
+          hint: 'Obrigatório: lista de barracas do expositor na feira.',
+        },
+        {
+          key: 'ownerId',
+          label: 'Expositor (opcional)',
+          type: 'CUID',
+          required: false,
+          hint: 'Filtra para 1 expositor.',
         },
       ],
       fields: [
