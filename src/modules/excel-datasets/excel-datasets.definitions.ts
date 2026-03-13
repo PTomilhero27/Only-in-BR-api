@@ -769,6 +769,19 @@ export function buildExcelDatasetDefinitions(
           ExcelValueFormat.BOOL,
           'Infra',
         ),
+        field(
+          'owner.fullName',
+          'Nome do expositor',
+          ExcelValueFormat.TEXT,
+          'Expositor',
+        ),
+        field(
+          'owner.document',
+          'Documento (CPF/CNPJ)',
+          ExcelValueFormat.TEXT,
+          'Expositor',
+        ),
+        field('owner.email', 'E-mail', ExcelValueFormat.TEXT, 'Contato'),
       ],
     },
 

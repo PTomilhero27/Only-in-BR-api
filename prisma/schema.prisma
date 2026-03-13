@@ -224,6 +224,7 @@ model User {
   fairContractSettings                 FairContractSettings[]
   ownerFairPurchaseInstallmentPayments OwnerFairPurchaseInstallmentPayment[]
   ownerFairPurchaseAdjustments         OwnerFairPurchaseAdjustment[]
+  fairMagicLinksCreated                FairMagicLink[]                       @relation("FairMagicLinksCreated")
 
   @@index([ownerId])
   @@index([role])
@@ -311,9 +312,10 @@ model Fair {
 
   taxes FairTax[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  fairMap   FairMap?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  fairMap    FairMap?
+  magicLinks FairMagicLink[]
 
   @@index([createdByUserId])
 }
@@ -1288,4 +1290,38 @@ model FairMapBoothLink {
   @@unique([fairMapId, slotClientKey])
   @@unique([fairMapId, stallFairId]) // impede a mesma barraca em 2 slots
   @@index([stallFairId])
+}
+
+// =====================
+// MAGIC LINKS (DPEN)
+// =====================
+
+model FairMagicLink {
+  id String @id @default(uuid())
+
+  fairId String
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Código de acesso (PIN) do link.
+   * Não precisa obrigatoriamente ser hash, já que o ID já é um UUID.
+   */
+  accessCode String
+
+  /**
+   * Quem gerou este link (Admin).
+   */
+  createdByUserId String
+  createdBy       User   @relation("FairMagicLinksCreated", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  /**
+   * Se o admin desativar o link, ele para de funcionar imediatamente
+   */
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fairId])
+  @@index([isActive])
 }

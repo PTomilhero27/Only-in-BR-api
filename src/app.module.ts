@@ -24,6 +24,7 @@ import { ExcelExportRequirementsModule } from './modules/excel-export-requiremen
 import { MapTemplatesModule } from './modules/map-templates/map-templates.module';
 import { FairMapsModule } from './modules/fair-maps/fair-maps.module';
 import { OwnerFairPurchaseModule } from './modules/owner-fair-purchase/owner-fair-purchase.module';
+import { MagicLinksModule } from './modules/magic-links/magic-links.module';
 
 @Global()
 @Module({
@@ -50,6 +51,7 @@ import { OwnerFairPurchaseModule } from './modules/owner-fair-purchase/owner-fai
     MapTemplatesModule,
     FairMapsModule,
     OwnerFairPurchaseModule,
+    MagicLinksModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],

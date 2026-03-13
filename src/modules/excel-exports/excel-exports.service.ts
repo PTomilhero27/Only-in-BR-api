@@ -360,6 +360,7 @@ export class ExcelExportsService {
               id: sf.ownerFair.owner.id,
               fullName: sf.ownerFair.owner.fullName,
               document: sf.ownerFair.owner.document,
+              email: sf.ownerFair.owner.email,
             },
 
             purchase: {
@@ -372,6 +373,35 @@ export class ExcelExportsService {
             stallFair: {
               id: sf.id,
               createdAt: sf.createdAt,
+            },
+          };
+        }),
+
+        /**
+         * ✅ OWNER_STALLS_LIST
+         *
+         * Retorna uma linha por barraca do expositor.
+         */
+        [ExcelDataset.OWNER_STALLS_LIST]: stallFairs.map((sf) => {
+          return {
+            stall: {
+              id: sf.stall.id,
+              pdvName: sf.stall.pdvName,
+              bannerName: sf.stall.bannerName,
+              mainCategory: sf.stall.mainCategory,
+              stallType: sf.stall.stallType,
+              stallSize: sf.stall.stallSize,
+              machinesQty: sf.stall.machinesQty,
+              teamQty: sf.stall.teamQty,
+            },
+            powerNeed: {
+              needsGas: sf.stall.powerNeed?.needsGas ?? false,
+            },
+            owner: {
+              id: sf.ownerFair.owner.id,
+              fullName: sf.ownerFair.owner.fullName,
+              document: sf.ownerFair.owner.document,
+              email: sf.ownerFair.owner.email,
             },
           };
         }),
