@@ -616,6 +616,44 @@ export function buildExcelDatasetDefinitions(
           ExcelValueFormat.TEXT,
           'Expositor',
         ),
+        field('owner.email', 'E-mail', ExcelValueFormat.TEXT, 'Contato'),
+        field('owner.phone', 'Telefone', ExcelValueFormat.TEXT, 'Contato'),
+
+        // =========================
+        // DADOS BANCÁRIOS / PIX
+        // =========================
+        field('owner.pixKey', 'Chave Pix', ExcelValueFormat.TEXT, 'Dados Bancários'),
+        field('owner.bankName', 'Banco do Favorecido', ExcelValueFormat.TEXT, 'Dados Bancários'),
+        field(
+          'owner.bankAgency',
+          'Agência do Favorecido',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
+        field(
+          'owner.bankAccount',
+          'Conta do Favorecido',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
+        field(
+          'owner.bankAccountType',
+          'Tipo de Conta do Favorecido',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
+        field(
+          'owner.bankHolderName',
+          'Nome / Razão Social do Favorecido',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
+        field(
+          'owner.bankHolderDoc',
+          'CPF/CNPJ do titular da conta',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
 
         field(
           'purchase.totalCents',

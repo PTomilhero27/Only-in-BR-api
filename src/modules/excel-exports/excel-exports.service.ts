@@ -368,6 +368,14 @@ export class ExcelExportsService {
               fullName: sf.ownerFair.owner.fullName,
               document: sf.ownerFair.owner.document,
               email: sf.ownerFair.owner.email,
+              phone: sf.ownerFair.owner.phone,
+              pixKey: sf.ownerFair.owner.pixKey,
+              bankName: sf.ownerFair.owner.bankName,
+              bankAgency: sf.ownerFair.owner.bankAgency,
+              bankAccount: sf.ownerFair.owner.bankAccount,
+              bankAccountType: sf.ownerFair.owner.bankAccountType,
+              bankHolderName: sf.ownerFair.owner.bankHolderName,
+              bankHolderDoc: sf.ownerFair.owner.bankHolderDoc,
             },
 
             purchase: {
