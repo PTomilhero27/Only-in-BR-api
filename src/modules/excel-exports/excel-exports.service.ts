@@ -263,6 +263,13 @@ export class ExcelExportsService {
               document: of.owner.document,
               email: of.owner.email,
               phone: of.owner.phone,
+              pixKey: of.owner.pixKey,
+              bankName: of.owner.bankName,
+              bankAgency: of.owner.bankAgency,
+              bankAccount: of.owner.bankAccount,
+              bankAccountType: of.owner.bankAccountType,
+              bankHolderName: of.owner.bankHolderName,
+              bankHolderDoc: of.owner.bankHolderDoc,
             },
             ownerFair: {
               status: of.status,
