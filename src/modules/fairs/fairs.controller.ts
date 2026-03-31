@@ -79,6 +79,13 @@ export class FairsController {
     return this.fairsService.list(query);
   }
 
+  @HttpCode(200)
+  @Post(':id/finalize')
+  @ApiOperation({ summary: 'Finalizar feira' })
+  finalize(@Param('id') fairId: string, @CurrentUser() user: JwtPayload) {
+    return this.fairsService.finalize(fairId, user.id);
+  }
+
   // ---------------------------------------------------------
   // Expositores por feira
   // ---------------------------------------------------------

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { FairStatus } from '@prisma/client';
 import { CreateDocumentTemplateDto } from '../dto/templates/create-document-template.dto';
 import { ListDocumentTemplatesDto } from '../dto/templates/list-document-templates.dto';
 import { UpdateDocumentTemplateDto } from '../dto/templates/update-document-template.dto';
@@ -151,9 +152,13 @@ export class DocumentTemplatesService {
   async upsert(fairId: string, dto: UpsertFairContractSettingsDto, actorUserId: string) {
     const fair = await this.prisma.fair.findUnique({
       where: { id: fairId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!fair) throw new NotFoundException('Feira não encontrada.');
+
+    if (fair.status === FairStatus.FINALIZADA) {
+      throw new BadRequestException('Não é possível alterar configurações de contrato de uma feira finalizada.');
+    }
 
     const template = await this.prisma.documentTemplate.findUnique({
       where: { id: dto.templateId },

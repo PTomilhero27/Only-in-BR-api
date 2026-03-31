@@ -473,10 +473,13 @@ export class ExhibitorFairsService {
 
     const ownerFair = await this.prisma.ownerFair.findUnique({
       where: { ownerId_fairId: { ownerId, fairId } },
-      select: { id: true, stallsQty: true },
+      select: { id: true, stallsQty: true, fair: { select: { status: true } } },
     });
     if (!ownerFair)
       throw new BadRequestException('Você não está vinculado a esta feira.');
+    if (ownerFair.fair.status === FairStatus.FINALIZADA) {
+      throw new BadRequestException('Não é possível vincular barracas em uma feira finalizada.');
+    }
 
     const stall = await this.prisma.stall.findFirst({
       where: { id: stallId, ownerId },
@@ -621,10 +624,13 @@ export class ExhibitorFairsService {
 
     const ownerFair = await this.prisma.ownerFair.findUnique({
       where: { ownerId_fairId: { ownerId, fairId } },
-      select: { id: true },
+      select: { id: true, fair: { select: { status: true } } },
     });
     if (!ownerFair)
       throw new BadRequestException('Você não está vinculado a esta feira.');
+    if (ownerFair.fair.status === FairStatus.FINALIZADA) {
+      throw new BadRequestException('Não é possível desvincular barracas de uma feira finalizada.');
+    }
 
     const stall = await this.prisma.stall.findFirst({
       where: { id: stallId, ownerId },

@@ -20,6 +20,7 @@ import { UpdateExhibitorStatusDto } from './dto/exhibitors/update-exhibitor-stat
 import {
   AuditAction,
   AuditEntity,
+  FairStatus,
   MapElementType,
   OwnerFairPaymentStatus,
   OwnerFairStatus,
@@ -608,6 +609,10 @@ export class FairsService {
         },
       });
       if (!before) throw new NotFoundException('Feira não encontrada.');
+
+      if (before.status === FairStatus.FINALIZADA) {
+        throw new BadRequestException('Não é possível editar uma feira finalizada.');
+      }
 
       const stallsReserved = (before.ownerFairs ?? []).reduce(
         (acc: number, x: any) => acc + (x.stallsQty ?? 0),
@@ -1711,5 +1716,126 @@ export class FairsService {
     });
 
     return result;
+  }
+
+  // ---------------------------------------------------------
+  // Finalização (Encerramento do Evento)
+  // ---------------------------------------------------------
+
+  /**
+   * Finaliza a feira.
+   * Regras:
+   * 1. Status vira FINALIZADA
+   * 2. Conta OwnerParticipated e StallParticipated (somente com barraca na feira).
+   * 3. OwnerFairs viram CONCLUIDO.
+   * 4. Registro de Auditoria FINALIZE_FAIR.
+   * 5. Quitação massiva financeira (status = PAID, etc).
+   */
+  async finalize(fairId: string, actorUserId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const fair = await tx.fair.findUnique({
+        where: { id: fairId },
+        include: {
+          ownerFairs: {
+            include: { stallFairs: true },
+          },
+          stallFairs: true,
+        },
+      });
+
+      if (!fair) throw new NotFoundException('Feira não encontrada.');
+
+      if (fair.status !== FairStatus.ATIVA) {
+        throw new BadRequestException('Apenas feiras com status ATIVA podem ser finalizadas.');
+      }
+
+      // Todos viram CONCLUIDO
+      await tx.ownerFair.updateMany({
+        where: { fairId },
+        data: { status: OwnerFairStatus.CONCLUIDO },
+      });
+
+      const participatingOwnerIds = fair.ownerFairs
+        .filter((of) => of.stallFairs.length > 0)
+        .map((of) => of.ownerId);
+
+      const uniqueOwnerIds = Array.from(new Set(participatingOwnerIds));
+      if (uniqueOwnerIds.length > 0) {
+        await tx.owner.updateMany({
+          where: { id: { in: uniqueOwnerIds } },
+          data: { fairsParticipatedCount: { increment: 1 } },
+        });
+      }
+
+      const participatingStallIds = fair.stallFairs.map((sf) => sf.stallId);
+      const uniqueStallIds = Array.from(new Set(participatingStallIds));
+      if (uniqueStallIds.length > 0) {
+        await tx.stall.updateMany({
+          where: { id: { in: uniqueStallIds } },
+          data: { fairsParticipatedCount: { increment: 1 } },
+        });
+      }
+
+      // Financeiro global -> Quitados
+      const now = new Date();
+      const ownerFairIds = fair.ownerFairs.map((of) => of.id);
+
+      if (ownerFairIds.length > 0) {
+        const purchases = await tx.ownerFairPurchase.findMany({
+          where: { ownerFairId: { in: ownerFairIds } },
+        });
+
+        for (const p of purchases) {
+          await tx.ownerFairPurchase.update({
+            where: { id: p.id },
+            data: {
+              status: OwnerFairPaymentStatus.PAID,
+              paidCents: p.totalCents,
+              paidAt: now,
+            },
+          });
+        }
+
+        const purchaseIds = purchases.map((p) => p.id);
+        if (purchaseIds.length > 0) {
+          const installments = await tx.ownerFairPurchaseInstallment.findMany({
+            where: { purchaseId: { in: purchaseIds } },
+          });
+
+          for (const i of installments) {
+            await tx.ownerFairPurchaseInstallment.update({
+              where: { id: i.id },
+              data: {
+                paidAt: now,
+                paidAmountCents: i.amountCents,
+              },
+            });
+          }
+        }
+      }
+
+      const updatedFair = await tx.fair.update({
+        where: { id: fairId },
+        data: { status: FairStatus.FINALIZADA },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: AuditAction.UPDATE,
+          entity: AuditEntity.FAIR,
+          entityId: fairId,
+          actorUserId,
+          meta: {
+            action: 'FINALIZE_FAIR',
+            fairId,
+            finishedAt: now.toISOString(),
+            totalOwners: uniqueOwnerIds.length,
+            totalStalls: uniqueStallIds.length,
+          },
+        },
+      });
+
+      return updatedFair;
+    });
   }
 }

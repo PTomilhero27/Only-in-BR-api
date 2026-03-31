@@ -8,7 +8,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { CreateAssinafySignUrlDto } from '../dto/assinafy/create-sign-url.dto';
 import { CreateAssinafySignUrlResponseDto } from '../dto/assinafy/create-sign-url-response.dto';
-import { OwnerFairStatus } from '@prisma/client';
+import { FairStatus, OwnerFairStatus } from '@prisma/client';
 
 /**
  * ContractsAssinafyService
@@ -354,7 +354,7 @@ async createOrReuseSignUrl(
       status: true,
       contractSignedAt: true,
       owner: { select: { document: true } },
-      fair: { select: { contractSettings: { select: { templateId: true } } } },
+      fair: { select: { status: true, contractSettings: { select: { templateId: true } } } },
     },
   });
 
@@ -362,6 +362,10 @@ async createOrReuseSignUrl(
     throw new NotFoundException(
       'Expositor não está vinculado a esta feira (OwnerFair não encontrado).',
     );
+  }
+
+  if (ownerFair.fair.status === FairStatus.FINALIZADA) {
+    throw new BadRequestException('Não é possível gerar contrato para uma feira finalizada.');
   }
 
   const mainTemplateId = ownerFair.fair?.contractSettings?.templateId;

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { FairStatus } from '@prisma/client';
 
 @Injectable()
 export class ContractsStorageService {
@@ -82,13 +83,17 @@ async uploadContractPdf(params: {
 
   const ownerFair = await this.prisma.ownerFair.findFirst({
     where: { fairId: params.fairId, ownerId: params.ownerId },
-    select: { id: true, owner: { select: { document: true } } },
+    select: { id: true, fair: { select: { status: true } }, owner: { select: { document: true } } },
   });
 
   if (!ownerFair) {
     throw new NotFoundException(
       'Expositor não está vinculado a esta feira (OwnerFair não encontrado).',
     );
+  }
+
+  if (ownerFair.fair.status === FairStatus.FINALIZADA) {
+    throw new BadRequestException('Não é permitido alterar contratos de uma feira finalizada.');
   }
 
   const ownerDocument = ownerFair.owner.document;

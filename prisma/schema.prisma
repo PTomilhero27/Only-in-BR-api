@@ -415,6 +415,11 @@ model Owner {
    */
   users User[]
 
+  /**
+   * ✅ Quantidade de feiras que o expositor participou (com barraca vinculada).
+   */
+  fairsParticipatedCount Int @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -551,6 +556,11 @@ model Stall {
    */
   equipments StallEquipment[]
   powerNeed  StallPowerNeed?
+
+  /**
+   * ✅ Quantidade de feiras que a barraca participou.
+   */
+  fairsParticipatedCount Int @default(0)
 
   @@unique([ownerId, pdvNameNormalized])
   @@index([ownerId])

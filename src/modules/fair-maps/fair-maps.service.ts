@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { SetFairMapTemplateDto } from './dto/set-fair-map-template.dto';
 import { LinkBoothSlotDto } from './dto/link-booth-slot.dto';
-import { MapElementType } from '@prisma/client';
+import { FairStatus, MapElementType } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FairMapAvailableStallFairDto } from './dto/fair-map-available-stall-fair.dto';
 
@@ -134,7 +134,10 @@ export class FairMapsService {
    *   pois o template pode ter sido editado desde o último vínculo.
    */
   async setTemplate(fairId: string, dto: SetFairMapTemplateDto) {
-    await this.ensureFairExists(fairId);
+    const fair = await this.ensureFairExists(fairId);
+    if (fair.status === FairStatus.FINALIZADA) {
+      throw new BadRequestException('Não é possível alterar a planta de uma feira finalizada.');
+    }
     const tpl = await this.ensureTemplateExists(dto.templateId);
 
     const existing = await this.prisma.fairMap.findUnique({
@@ -348,7 +351,10 @@ export class FairMapsService {
    * - Se o slot não existir mais, a própria sincronização anterior já limpa o link antigo.
    */
   async linkSlot(fairId: string, slotClientKey: string, dto: LinkBoothSlotDto) {
-    await this.ensureFairExists(fairId);
+    const fair = await this.ensureFairExists(fairId);
+    if (fair.status === FairStatus.FINALIZADA) {
+      throw new BadRequestException('Não é possível alterar os vínculos do mapa de uma feira finalizada.');
+    }
 
     await this.syncInvalidLinksWithCurrentTemplate(fairId);
 
