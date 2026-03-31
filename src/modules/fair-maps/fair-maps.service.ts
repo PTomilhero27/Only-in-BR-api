@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { SetFairMapTemplateDto } from './dto/set-fair-map-template.dto';
 import { LinkBoothSlotDto } from './dto/link-booth-slot.dto';
-import { FairStatus, MapElementType } from '@prisma/client';
+import { FairStatus, MapElementType, MarketplaceSlotStatus } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FairMapAvailableStallFairDto } from './dto/fair-map-available-stall-fair.dto';
 
@@ -61,7 +61,14 @@ export class FairMapsService {
    * Essa limpeza é essencial porque o template pode ser editado depois
    * de já existirem vínculos salvos.
    */
-  private async syncInvalidLinksWithCurrentTemplate(fairId: string) {
+  /**
+   * Sincronização detalhada do Mapa:
+   * 1. Remove vínculos (links) inválidos ou órfãos.
+   * 2. Garante que cada BOOTH_SLOT do template tenha um registro correspondente
+   *    na tabela de Marketplace (FairMapSlot).
+   * 3. Remove registros de Marketplace órfãos.
+   */
+  private async syncDetailedFairMap(fairId: string) {
     const fairMap = await this.prisma.fairMap.findUnique({
       where: { fairId },
       include: {
@@ -80,6 +87,7 @@ export class FairMapsService {
             },
           },
         },
+        slots: true, // Slots de marketplace atuais
       },
     });
 
@@ -89,15 +97,15 @@ export class FairMapsService {
       );
     }
 
-    const validSlotKeys = new Set(
-      fairMap.template.elements
-        .filter(
-          (el) =>
-            el.type === MapElementType.BOOTH_SLOT && Boolean(el.isLinkable),
-        )
-        .map((el) => el.clientKey),
+    const templateElements = fairMap.template.elements.filter(
+      (el) => el.type === MapElementType.BOOTH_SLOT && Boolean(el.isLinkable),
     );
 
+    const validSlotKeys = new Set(templateElements.map((el) => el.clientKey));
+
+    /**
+     * 1. Limpeza de Vínculos (Links)
+     */
     const invalidLinkIds = fairMap.links
       .filter((link) => {
         const slotStillExists = validSlotKeys.has(link.slotClientKey);
@@ -114,6 +122,49 @@ export class FairMapsService {
           id: {
             in: invalidLinkIds,
           },
+        },
+      });
+    }
+
+    /**
+     * 2. Sincronização de Slots de Marketplace (FairMapSlot)
+     * Upsert para garantir que cada booth do template tenha um slot comercial.
+     */
+    for (const el of templateElements) {
+      await this.prisma.fairMapSlot.upsert({
+        where: {
+          fairMapId_fairMapElementId: {
+            fairMapId: fairMap.id,
+            fairMapElementId: el.clientKey,
+          },
+        },
+        create: {
+          fairId,
+          fairMapId: fairMap.id,
+          fairMapElementId: el.clientKey,
+          label: el.label,
+          priceCents: 0,
+          commercialStatus: MarketplaceSlotStatus.AVAILABLE,
+          isPublic: true,
+        },
+        update: {
+          // Mantém preço e status, mas atualiza label se mudar no template
+          label: el.label,
+        },
+      });
+    }
+
+    /**
+     * 3. Limpeza de Slots de Marketplace Órfãos
+     */
+    const orphanSlotIds = fairMap.slots
+      .filter((s) => !validSlotKeys.has(s.fairMapElementId))
+      .map((s) => s.id);
+
+    if (orphanSlotIds.length > 0) {
+      await this.prisma.fairMapSlot.deleteMany({
+        where: {
+          id: { in: orphanSlotIds },
         },
       });
     }
@@ -173,7 +224,7 @@ export class FairMapsService {
      * Mesmo mantendo o mesmo template, garantimos que os vínculos
      * continuam compatíveis com os slots atuais.
      */
-    await this.syncInvalidLinksWithCurrentTemplate(fairId);
+    await this.syncDetailedFairMap(fairId);
 
     return this.getFairMap(fairId);
   }
@@ -192,7 +243,7 @@ export class FairMapsService {
   async getFairMap(fairId: string) {
     await this.ensureFairExists(fairId);
 
-    await this.syncInvalidLinksWithCurrentTemplate(fairId);
+    await this.syncDetailedFairMap(fairId);
 
     const fairMap = await this.prisma.fairMap.findUnique({
       where: { fairId },
@@ -214,6 +265,18 @@ export class FairMapsService {
                 },
               },
             },
+          },
+        },
+        slots: {
+          select: {
+            id: true,
+            fairMapElementId: true,
+            code: true,
+            label: true,
+            priceCents: true,
+            commercialStatus: true,
+            isPublic: true,
+            notes: true,
           },
         },
       },
@@ -280,6 +343,16 @@ export class FairMapsService {
           ownerPhone: l.stallFair.ownerFair.owner.phone ?? null,
         },
       })),
+      slots: (fairMap.slots ?? []).map((s) => ({
+        id: s.id,
+        fairMapElementId: s.fairMapElementId,
+        code: s.code,
+        label: s.label,
+        priceCents: s.priceCents,
+        commercialStatus: s.commercialStatus,
+        isPublic: s.isPublic,
+        notes: s.notes,
+      })),
     };
   }
 
@@ -297,7 +370,7 @@ export class FairMapsService {
   ): Promise<FairMapAvailableStallFairDto[]> {
     await this.ensureFairExists(fairId);
 
-    await this.syncInvalidLinksWithCurrentTemplate(fairId);
+    await this.syncDetailedFairMap(fairId);
 
     const fairMap = await this.prisma.fairMap.findUnique({
       where: { fairId },
@@ -357,7 +430,7 @@ export class FairMapsService {
       );
     }
 
-    await this.syncInvalidLinksWithCurrentTemplate(fairId);
+    await this.syncDetailedFairMap(fairId);
 
     const fairMap = await this.prisma.fairMap.findUnique({
       where: { fairId },
