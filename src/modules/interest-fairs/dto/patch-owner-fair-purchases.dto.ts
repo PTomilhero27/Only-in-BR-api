@@ -1,12 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   ValidateNested,
-} from 'class-validator'
-import { Type } from 'class-transformer'
-import { OwnerFairPurchaseLineDto } from './owner-fair-purchase-line.dto'
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { OwnerFairPurchaseLineDto } from './owner-fair-purchase-line.dto';
 
 /**
  * ✅ PatchOwnerFairPurchasesDto
@@ -40,5 +40,5 @@ export class PatchOwnerFairPurchasesDto {
   @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => OwnerFairPurchaseLineDto)
-  purchases!: OwnerFairPurchaseLineDto[]
+  purchases!: OwnerFairPurchaseLineDto[];
 }

@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   BadRequestException,
   Injectable,
@@ -136,7 +133,9 @@ export class FairMapsService {
   async setTemplate(fairId: string, dto: SetFairMapTemplateDto) {
     const fair = await this.ensureFairExists(fairId);
     if (fair.status === FairStatus.FINALIZADA) {
-      throw new BadRequestException('Não é possível alterar a planta de uma feira finalizada.');
+      throw new BadRequestException(
+        'Não é possível alterar a planta de uma feira finalizada.',
+      );
     }
     const tpl = await this.ensureTemplateExists(dto.templateId);
 
@@ -353,7 +352,9 @@ export class FairMapsService {
   async linkSlot(fairId: string, slotClientKey: string, dto: LinkBoothSlotDto) {
     const fair = await this.ensureFairExists(fairId);
     if (fair.status === FairStatus.FINALIZADA) {
-      throw new BadRequestException('Não é possível alterar os vínculos do mapa de uma feira finalizada.');
+      throw new BadRequestException(
+        'Não é possível alterar os vínculos do mapa de uma feira finalizada.',
+      );
     }
 
     await this.syncInvalidLinksWithCurrentTemplate(fairId);

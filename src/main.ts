@@ -61,12 +61,16 @@ async function bootstrap() {
       if (!origin) return callback(null, true);
 
       // Se a lista estiver vazia em produção, bloqueia por segurança
-      if (corsOrigins.length === 0) return callback(new Error('CORS: origem não permitida'), false);
+      if (corsOrigins.length === 0)
+        return callback(new Error('CORS: origem não permitida'), false);
 
       // Libera se o origin está na allowlist
       if (corsOrigins.includes(origin)) return callback(null, true);
 
-      return callback(new Error(`CORS: origem não permitida: ${origin}`), false);
+      return callback(
+        new Error(`CORS: origem não permitida: ${origin}`),
+        false,
+      );
     },
     credentials: true,
   });
@@ -76,7 +80,10 @@ async function bootstrap() {
     .setTitle('Feira Gastronômica API')
     .setDescription('API do sistema da feira gastronômica')
     .setVersion('1.0.0')
-    .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'bearer')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'bearer',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -89,7 +96,9 @@ async function bootstrap() {
   console.log(`✅ API rodando em: ${baseUrl}`);
   console.log(`📚 Swagger em: ${baseUrl}/docs`);
   console.log(`🩺 Health em: ${baseUrl}/health`);
-  console.log(`🌐 CORS origins permitidos: ${corsOrigins.length ? corsOrigins.join(', ') : '(nenhum)'} `);
+  console.log(
+    `🌐 CORS origins permitidos: ${corsOrigins.length ? corsOrigins.join(', ') : '(nenhum)'} `,
+  );
 }
 
 bootstrap();

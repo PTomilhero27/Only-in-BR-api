@@ -25,6 +25,9 @@ import { MapTemplatesModule } from './modules/map-templates/map-templates.module
 import { FairMapsModule } from './modules/fair-maps/fair-maps.module';
 import { OwnerFairPurchaseModule } from './modules/owner-fair-purchase/owner-fair-purchase.module';
 import { MagicLinksModule } from './modules/magic-links/magic-links.module';
+import { MailModule } from './modules/mail/mail.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { PublicMarketplaceModule } from './modules/public/marketplace/public-marketplace.module';
 
 @Global()
 @Module({
@@ -42,7 +45,6 @@ import { MagicLinksModule } from './modules/magic-links/magic-links.module';
     ExhibitorAuthModule,
     OwnersModule,
     ExhibitorFairsModule,
-
     PublicInterestsModule,
     ExcelTemplatesModule,
     ExcelExportsModule,
@@ -52,6 +54,9 @@ import { MagicLinksModule } from './modules/magic-links/magic-links.module';
     FairMapsModule,
     OwnerFairPurchaseModule,
     MagicLinksModule,
+    MailModule,
+    MarketplaceModule,
+    PublicMarketplaceModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],

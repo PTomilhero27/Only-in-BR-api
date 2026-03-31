@@ -13,7 +13,7 @@ import { ExcelGeneratorService } from './excel-generator.service';
  * - Mantém o "core" desacoplado de controllers e regras específicas de dataset
  */
 @Module({
-    providers: [ExcelGeneratorService],
-    exports: [ExcelGeneratorService],
+  providers: [ExcelGeneratorService],
+  exports: [ExcelGeneratorService],
 })
-export class ExcelCoreModule { }
+export class ExcelCoreModule {}

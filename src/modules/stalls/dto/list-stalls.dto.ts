@@ -1,7 +1,7 @@
 // src/modules/stalls/dto/list-stalls.dto.ts
-import { ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /**
  * DTO de listagem de barracas (painel do expositor).
@@ -21,7 +21,7 @@ export class ListStallsDto {
   })
   @IsOptional()
   @IsString({ message: 'q deve ser uma string' })
-  q?: string
+  q?: string;
 
   @ApiPropertyOptional({
     example: 1,
@@ -32,7 +32,7 @@ export class ListStallsDto {
   @Type(() => Number)
   @IsInt({ message: 'page deve ser um número inteiro' })
   @Min(1, { message: 'page deve ser >= 1' })
-  page?: number
+  page?: number;
 
   @ApiPropertyOptional({
     example: 20,
@@ -44,7 +44,7 @@ export class ListStallsDto {
   @IsInt({ message: 'pageSize deve ser um número inteiro' })
   @Min(1, { message: 'pageSize deve ser >= 1' })
   @Max(100, { message: 'pageSize deve ser <= 100' })
-  pageSize?: number
+  pageSize?: number;
 
   @ApiPropertyOptional({
     example: 'updatedAt_desc',
@@ -56,5 +56,5 @@ export class ListStallsDto {
   @IsIn(['updatedAt_desc', 'createdAt_desc'], {
     message: 'sort deve ser updatedAt_desc ou createdAt_desc',
   })
-  sort?: 'updatedAt_desc' | 'createdAt_desc'
+  sort?: 'updatedAt_desc' | 'createdAt_desc';
 }

@@ -1,7 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { ValidateNested } from 'class-validator'
-import { Type } from 'class-transformer'
-import { ExhibitorFairListItemDto } from './exhibitor-fair-list-item.dto'
+import { ApiProperty } from '@nestjs/swagger';
+import { ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ExhibitorFairListItemDto } from './exhibitor-fair-list-item.dto';
 
 /**
  * Response da listagem de feiras do expositor no portal.
@@ -13,5 +13,5 @@ export class ListMyFairsResponseDto {
   })
   @ValidateNested({ each: true })
   @Type(() => ExhibitorFairListItemDto)
-  items!: ExhibitorFairListItemDto[]
+  items!: ExhibitorFairListItemDto[];
 }

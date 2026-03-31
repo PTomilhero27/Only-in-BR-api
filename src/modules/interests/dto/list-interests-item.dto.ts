@@ -58,7 +58,11 @@ export class ListInterestsItemDto {
   @ApiPropertyOptional({ nullable: true, example: '98765-4' })
   bankAccount?: string | null;
 
-  @ApiPropertyOptional({ nullable: true, enum: BankAccountType, example: BankAccountType.CORRENTE })
+  @ApiPropertyOptional({
+    nullable: true,
+    enum: BankAccountType,
+    example: BankAccountType.CORRENTE,
+  })
   bankAccountType?: BankAccountType | null;
 
   @ApiPropertyOptional({ nullable: true, example: '12345678901' })
@@ -79,7 +83,8 @@ export class ListInterestsItemDto {
    * true quando existe usuário do portal vinculado ao Owner com senha definida.
    */
   @ApiProperty({
-    description: 'Indica se o interessado já possui login/senha definidos no portal.',
+    description:
+      'Indica se o interessado já possui login/senha definidos no portal.',
     example: false,
   })
   hasPortalLogin: boolean;

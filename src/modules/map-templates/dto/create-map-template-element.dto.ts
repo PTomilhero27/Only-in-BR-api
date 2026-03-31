@@ -95,8 +95,7 @@ export class CreateMapTemplateElementDto {
 
   @ApiPropertyOptional({
     example: 1,
-    description:
-      'Número da barraca (usado principalmente em BOOTH_SLOT).',
+    description: 'Número da barraca (usado principalmente em BOOTH_SLOT).',
   })
   @IsOptional()
   @IsNumber()
@@ -122,8 +121,7 @@ export class CreateMapTemplateElementDto {
 
   @ApiPropertyOptional({
     example: 20,
-    description:
-      'Raio do elemento (obrigatório para TREE e CIRCLE).',
+    description: 'Raio do elemento (obrigatório para TREE e CIRCLE).',
   })
   @IsOptional()
   @IsNumber()
@@ -136,8 +134,7 @@ export class CreateMapTemplateElementDto {
 
   @ApiProperty({
     type: MapElementStyleDto,
-    description:
-      'Objeto de estilo persistido como JSON no banco.',
+    description: 'Objeto de estilo persistido como JSON no banco.',
   })
   @ValidateNested()
   @Type(() => MapElementStyleDto)

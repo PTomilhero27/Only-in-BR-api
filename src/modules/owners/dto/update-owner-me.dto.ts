@@ -10,7 +10,14 @@
  * - Os demais campos são opcionais/nullable (o usuário pode preencher aos poucos).
  */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 import { BankAccountType } from '@prisma/client';
 
 export class UpdateOwnerMeDto {
@@ -26,10 +33,16 @@ export class UpdateOwnerMeDto {
   @Length(2, 200, { message: 'name deve ter entre 2 e 200 caracteres.' })
   name: string;
 
-  @ApiPropertyOptional({ example: '11999999999', nullable: true, description: 'Somente dígitos.' })
+  @ApiPropertyOptional({
+    example: '11999999999',
+    nullable: true,
+    description: 'Somente dígitos.',
+  })
   @IsOptional()
   @IsString({ message: 'phone deve ser string.' })
-  @Matches(/^\d{10,13}$/, { message: 'phone deve conter entre 10 e 13 dígitos.' })
+  @Matches(/^\d{10,13}$/, {
+    message: 'phone deve conter entre 10 e 13 dígitos.',
+  })
   phone?: string | null;
 
   @ApiPropertyOptional({
@@ -39,14 +52,20 @@ export class UpdateOwnerMeDto {
   })
   @IsOptional()
   @IsString({ message: 'stallsDescription deve ser string.' })
-  @MaxLength(2000, { message: 'stallsDescription deve ter no máximo 2000 caracteres.' })
+  @MaxLength(2000, {
+    message: 'stallsDescription deve ter no máximo 2000 caracteres.',
+  })
   stallsDescription?: string | null;
 
   // -----------------------
   // Endereço (schema atual Prisma)
   // -----------------------
 
-  @ApiPropertyOptional({ example: '01001000', nullable: true, description: 'CEP com 8 dígitos.' })
+  @ApiPropertyOptional({
+    example: '01001000',
+    nullable: true,
+    description: 'CEP com 8 dígitos.',
+  })
   @IsOptional()
   @IsString({ message: 'zipCode deve ser string.' })
   @Matches(/^\d{8}$/, { message: 'zipCode deve conter 8 dígitos.' })
@@ -55,7 +74,8 @@ export class UpdateOwnerMeDto {
   @ApiPropertyOptional({
     example: 'Rua João Antônio de Moraes - Jardim Sampaio',
     nullable: true,
-    description: 'Endereço “compacto” (rua + bairro etc.) conforme schema atual.',
+    description:
+      'Endereço “compacto” (rua + bairro etc.) conforme schema atual.',
   })
   @IsOptional()
   @IsString({ message: 'addressFull deve ser string.' })
@@ -74,7 +94,11 @@ export class UpdateOwnerMeDto {
   @Length(2, 120, { message: 'city deve ter entre 2 e 120 caracteres.' })
   city?: string | null;
 
-  @ApiPropertyOptional({ example: 'SP', nullable: true, description: 'UF com 2 letras.' })
+  @ApiPropertyOptional({
+    example: 'SP',
+    nullable: true,
+    description: 'UF com 2 letras.',
+  })
   @IsOptional()
   @IsString({ message: 'state deve ser string.' })
   @Matches(/^[A-Za-z]{2}$/, { message: 'state deve ter 2 letras (UF).' })
@@ -94,33 +118,52 @@ export class UpdateOwnerMeDto {
   @Length(2, 200, { message: 'pixKey deve ter entre 2 e 200 caracteres.' })
   pixKey?: string | null;
 
-  @ApiPropertyOptional({ enum: BankAccountType, nullable: true, example: BankAccountType.CORRENTE })
+  @ApiPropertyOptional({
+    enum: BankAccountType,
+    nullable: true,
+    example: BankAccountType.CORRENTE,
+  })
   @IsOptional()
   @IsEnum(BankAccountType, { message: 'bankAccountType inválido.' })
   bankAccountType?: BankAccountType | null;
 
-  @ApiPropertyOptional({ example: '260 - Nu Pagamentos (Nubank)', nullable: true })
+  @ApiPropertyOptional({
+    example: '260 - Nu Pagamentos (Nubank)',
+    nullable: true,
+  })
   @IsOptional()
   @IsString({ message: 'bankName deve ser string.' })
   @Length(2, 120, { message: 'bankName deve ter entre 2 e 120 caracteres.' })
   bankName?: string | null;
 
-  @ApiPropertyOptional({ example: '1234', nullable: true, description: 'Somente dígitos.' })
+  @ApiPropertyOptional({
+    example: '1234',
+    nullable: true,
+    description: 'Somente dígitos.',
+  })
   @IsOptional()
   @IsString({ message: 'bankAgency deve ser string.' })
   @Matches(/^\d{3,8}$/, { message: 'bankAgency deve conter de 3 a 8 dígitos.' })
   bankAgency?: string | null;
 
-  @ApiPropertyOptional({ example: '98765', nullable: true, description: 'Somente dígitos.' })
+  @ApiPropertyOptional({
+    example: '98765',
+    nullable: true,
+    description: 'Somente dígitos.',
+  })
   @IsOptional()
   @IsString({ message: 'bankAccount deve ser string.' })
-  @Matches(/^\d{4,20}$/, { message: 'bankAccount deve conter de 4 a 20 dígitos.' })
+  @Matches(/^\d{4,20}$/, {
+    message: 'bankAccount deve conter de 4 a 20 dígitos.',
+  })
   bankAccount?: string | null;
 
   @ApiPropertyOptional({ example: 'JOAO DA SILVA', nullable: true })
   @IsOptional()
   @IsString({ message: 'bankHolderName deve ser string.' })
-  @Length(2, 200, { message: 'bankHolderName deve ter entre 2 e 200 caracteres.' })
+  @Length(2, 200, {
+    message: 'bankHolderName deve ter entre 2 e 200 caracteres.',
+  })
   bankHolderName?: string | null;
 
   @ApiPropertyOptional({
@@ -130,6 +173,8 @@ export class UpdateOwnerMeDto {
   })
   @IsOptional()
   @IsString({ message: 'bankHolderDocument deve ser string.' })
-  @Matches(/^\d{11,14}$/, { message: 'bankHolderDocument deve conter 11 (CPF) ou 14 (CNPJ) dígitos.' })
+  @Matches(/^\d{11,14}$/, {
+    message: 'bankHolderDocument deve conter 11 (CPF) ou 14 (CNPJ) dígitos.',
+  })
   bankHolderDocument?: string | null;
 }

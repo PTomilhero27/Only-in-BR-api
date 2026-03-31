@@ -1,9 +1,15 @@
-import { Body, Controller, Param, Patch } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
-import { CurrentUser } from 'src/common/decorators/current-user.decorator'
-import { type JwtPayload } from 'src/common/types/jwt-payload.type'
-import { UpsertFairContractSettingsDto } from '../dto/templates/upsert-fair-contract-settings.dto'
-import { DocumentTemplatesService } from '../services/document-templates.service'
+import { Body, Controller, Param, Patch } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { CurrentUser } from 'src/common/decorators/current-user.decorator';
+import { type JwtPayload } from 'src/common/types/jwt-payload.type';
+import { UpsertFairContractSettingsDto } from '../dto/templates/upsert-fair-contract-settings.dto';
+import { DocumentTemplatesService } from '../services/document-templates.service';
 
 @ApiTags('FairContractSettings')
 @ApiBearerAuth()
@@ -25,6 +31,6 @@ export class FairContractSettingsController {
     @Body() dto: UpsertFairContractSettingsDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.service.upsert(fairId, dto, user.sub)
+    return this.service.upsert(fairId, dto, user.sub);
   }
 }

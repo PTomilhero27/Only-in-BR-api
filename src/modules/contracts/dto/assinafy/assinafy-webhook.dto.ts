@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 class AssinafyWebhookObjectDto {
   @ApiProperty({ example: 'efo39340da030af0g' })

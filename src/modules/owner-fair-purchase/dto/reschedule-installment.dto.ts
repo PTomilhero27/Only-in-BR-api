@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsOptional, IsString, Matches, MaxLength } from 'class-validator'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 /**
  * DTO para reprogramar vencimento de uma parcela (acordo/negociação).
@@ -12,8 +12,10 @@ export class RescheduleInstallmentDto {
     example: '2026-02-10',
   })
   @IsString()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'dueDate deve estar no formato YYYY-MM-DD.' })
-  dueDate!: string
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'dueDate deve estar no formato YYYY-MM-DD.',
+  })
+  dueDate!: string;
 
   @ApiPropertyOptional({
     description: 'Motivo/observação da reprogramação (para auditoria).',
@@ -22,5 +24,5 @@ export class RescheduleInstallmentDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  reason?: string
+  reason?: string;
 }

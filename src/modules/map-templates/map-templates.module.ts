@@ -4,6 +4,6 @@ import { MapTemplatesService } from './map-templates.service';
 
 @Module({
   controllers: [MapTemplatesController],
-  providers: [MapTemplatesService]
+  providers: [MapTemplatesService],
 })
 export class MapTemplatesModule {}

@@ -3,5 +3,5 @@
  * MVP: apenas confirmação.
  */
 export class SetPasswordResponseDto {
-  success!: boolean
+  success!: boolean;
 }

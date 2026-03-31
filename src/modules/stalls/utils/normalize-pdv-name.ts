@@ -8,8 +8,5 @@
  *   mas normalizar aqui melhora previsibilidade e mensagens de erro.
  */
 export function normalizePdvName(value: string) {
-  return (value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }

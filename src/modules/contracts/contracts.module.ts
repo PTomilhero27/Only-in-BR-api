@@ -26,17 +26,17 @@ import { ContractsAssinafyWebhooksController } from './controllers/contracts-ass
 @Module({
   imports: [PrismaModule],
   controllers: [
-    DocumentTemplatesController, 
-    FairContractSettingsController, 
-    ContractsFilesController, 
+    DocumentTemplatesController,
+    FairContractSettingsController,
+    ContractsFilesController,
     ContractsAssinafyController,
-    ContractsAssinafyWebhooksController
+    ContractsAssinafyWebhooksController,
   ],
   providers: [
-    DocumentTemplatesService, 
-    ContractsStorageService, 
+    DocumentTemplatesService,
+    ContractsStorageService,
     ContractsAssinafyService,
-    ContractsAssinafyWebhooksService
+    ContractsAssinafyWebhooksService,
   ],
   exports: [DocumentTemplatesService],
 })

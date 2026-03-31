@@ -130,7 +130,8 @@ export class ContractsAssinafyWebhooksService {
       // Regra:
       // - se comprou N barracas, deve vincular N
       // - usamos >= para não travar caso haja inconsistência momentânea (ex.: duplicidade corrigida depois)
-      const isAllLinked = stallsBought > 0 ? stallsLinked >= stallsBought : false;
+      const isAllLinked =
+        stallsBought > 0 ? stallsLinked >= stallsBought : false;
 
       // 6) Definir próximo status (pós-assinatura)
       // Importante:

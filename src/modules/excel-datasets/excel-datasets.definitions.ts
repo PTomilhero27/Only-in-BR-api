@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { ExcelDataset, ExcelValueFormat } from '@prisma/client';
 import {
   ExcelDatasetDefinition,
@@ -406,8 +405,18 @@ export function buildExcelDatasetDefinitions(
         // =========================
         // DADOS BANCÁRIOS / PIX
         // =========================
-        field('owner.pixKey', 'Chave Pix', ExcelValueFormat.TEXT, 'Dados Bancários'),
-        field('owner.bankName', 'Banco do Favorecido', ExcelValueFormat.TEXT, 'Dados Bancários'),
+        field(
+          'owner.pixKey',
+          'Chave Pix',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
+        field(
+          'owner.bankName',
+          'Banco do Favorecido',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
         field(
           'owner.bankAgency',
           'Agência do Favorecido',
@@ -622,8 +631,18 @@ export function buildExcelDatasetDefinitions(
         // =========================
         // DADOS BANCÁRIOS / PIX
         // =========================
-        field('owner.pixKey', 'Chave Pix', ExcelValueFormat.TEXT, 'Dados Bancários'),
-        field('owner.bankName', 'Banco do Favorecido', ExcelValueFormat.TEXT, 'Dados Bancários'),
+        field(
+          'owner.pixKey',
+          'Chave Pix',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
+        field(
+          'owner.bankName',
+          'Banco do Favorecido',
+          ExcelValueFormat.TEXT,
+          'Dados Bancários',
+        ),
         field(
           'owner.bankAgency',
           'Agência do Favorecido',

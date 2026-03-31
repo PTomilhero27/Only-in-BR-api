@@ -8,7 +8,8 @@ import { IsOptional, IsString, MaxLength } from 'class-validator';
 export class UpdateOwnerFairObservationsDto {
   @ApiPropertyOptional({
     example: 'Expositor pediu para ficar próximo ao palco. Chegar 12h.',
-    description: 'Observações internas do admin para este expositor nesta feira.',
+    description:
+      'Observações internas do admin para este expositor nesta feira.',
   })
   @IsOptional()
   @IsString()

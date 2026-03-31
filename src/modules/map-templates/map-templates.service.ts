@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable prettier/prettier */
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { MapElementType, Prisma } from "@prisma/client";

@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { IsEnum } from 'class-validator'
-import { OwnerFairStatus } from '@prisma/client'
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum } from 'class-validator';
+import { OwnerFairStatus } from '@prisma/client';
 
 /**
  * DTO para editar o status do expositor dentro da feira.
@@ -14,6 +14,8 @@ export class UpdateExhibitorStatusDto {
     example: OwnerFairStatus.AGUARDANDO_PAGAMENTO,
     description: 'Novo status do expositor no workflow da feira.',
   })
-  @IsEnum(OwnerFairStatus, { message: 'status deve ser um valor válido de OwnerFairStatus.' })
-  status!: OwnerFairStatus
+  @IsEnum(OwnerFairStatus, {
+    message: 'status deve ser um valor válido de OwnerFairStatus.',
+  })
+  status!: OwnerFairStatus;
 }

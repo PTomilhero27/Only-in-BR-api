@@ -19,10 +19,7 @@ export class MagicLinksController {
   }
 
   @Post(':id/access')
-  async accessLink(
-    @Param('id') id: string,
-    @Body() dto: AccessMagicLinkDto,
-  ) {
+  async accessLink(@Param('id') id: string, @Body() dto: AccessMagicLinkDto) {
     return this.magicLinksService.accessLink(id, dto.accessCode);
   }
 }

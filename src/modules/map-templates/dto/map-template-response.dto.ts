@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { MapTemplateElementResponseDto } from "./map-template-element-response.dto";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { MapTemplateElementResponseDto } from './map-template-element-response.dto';
 
 /**
  * MapTemplateResponseDto
@@ -8,16 +8,16 @@ import { MapTemplateElementResponseDto } from "./map-template-element-response.d
  * Aqui sim existe `elements`.
  */
 export class MapTemplateResponseDto {
-  @ApiProperty({ example: "tpl_xxxxx" })
+  @ApiProperty({ example: 'tpl_xxxxx' })
   id!: string;
 
-  @ApiProperty({ example: "Planta Principal" })
+  @ApiProperty({ example: 'Planta Principal' })
   title!: string;
 
-  @ApiPropertyOptional({ example: "Descrição..." })
+  @ApiPropertyOptional({ example: 'Descrição...' })
   description?: string | null;
 
-  @ApiPropertyOptional({ example: "https://..." })
+  @ApiPropertyOptional({ example: 'https://...' })
   backgroundUrl?: string | null;
 
   @ApiProperty({ example: 2000 })

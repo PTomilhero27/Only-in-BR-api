@@ -8,19 +8,35 @@ import { DocumentTemplateStatus } from '@prisma/client';
  * - Padronizar o formato retornado no Swagger/Front.
  */
 export class DocumentTemplateResponseDto {
-  @ApiProperty({ example: 'fcb5913a-f5f1-4353-967f-0d7e049d17e3', description: 'ID do template (UUID).' })
+  @ApiProperty({
+    example: 'fcb5913a-f5f1-4353-967f-0d7e049d17e3',
+    description: 'ID do template (UUID).',
+  })
   id!: string;
 
-  @ApiProperty({ example: 'Contrato de Exposição de Produtos', description: 'Título exibido no painel.' })
+  @ApiProperty({
+    example: 'Contrato de Exposição de Produtos',
+    description: 'Título exibido no painel.',
+  })
   title!: string;
 
-  @ApiProperty({ example: false, description: 'Se é um aditivo (por pessoa/OwnerFair).' })
+  @ApiProperty({
+    example: false,
+    description: 'Se é um aditivo (por pessoa/OwnerFair).',
+  })
   isAddendum!: boolean;
 
-  @ApiProperty({ example: true, description: 'Se inclui ficha cadastral (ANEXO I).' })
+  @ApiProperty({
+    example: true,
+    description: 'Se inclui ficha cadastral (ANEXO I).',
+  })
   hasRegistration!: boolean;
 
-  @ApiProperty({ enum: DocumentTemplateStatus, example: 'DRAFT', description: 'Status editorial do template.' })
+  @ApiProperty({
+    enum: DocumentTemplateStatus,
+    example: 'DRAFT',
+    description: 'Status editorial do template.',
+  })
   status!: DocumentTemplateStatus;
 
   @ApiProperty({
@@ -29,9 +45,15 @@ export class DocumentTemplateResponseDto {
   })
   content!: Record<string, any>;
 
-  @ApiProperty({ example: '2026-01-27T12:00:00.000Z', description: 'Data de criação.' })
+  @ApiProperty({
+    example: '2026-01-27T12:00:00.000Z',
+    description: 'Data de criação.',
+  })
   createdAt!: Date;
 
-  @ApiProperty({ example: '2026-01-27T12:10:00.000Z', description: 'Última atualização.' })
+  @ApiProperty({
+    example: '2026-01-27T12:10:00.000Z',
+    description: 'Última atualização.',
+  })
   updatedAt!: Date;
 }

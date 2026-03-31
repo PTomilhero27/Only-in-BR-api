@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger'
-import { IsOptional, IsString } from 'class-validator'
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
 /**
  * Querystring para link de barraca.
@@ -19,5 +19,5 @@ export class LinkStallQueryDto {
   })
   @IsOptional()
   @IsString()
-  purchaseId?: string
+  purchaseId?: string;
 }

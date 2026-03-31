@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsEnum, IsOptional, IsString } from 'class-validator'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 
 /**
  * Status do contrato exibido no Portal do Expositor.
@@ -20,7 +20,7 @@ export class ExhibitorFairContractSummaryDto {
     description: 'ID do contrato.',
   })
   @IsString()
-  contractId!: string
+  contractId!: string;
 
   @ApiProperty({
     enum: ExhibitorFairContractStatus,
@@ -28,7 +28,7 @@ export class ExhibitorFairContractSummaryDto {
     description: 'Status derivado para UX do portal.',
   })
   @IsEnum(ExhibitorFairContractStatus)
-  status!: ExhibitorFairContractStatus
+  status!: ExhibitorFairContractStatus;
 
   @ApiPropertyOptional({
     example: 'contracts/2026/02/contract-abc.pdf',
@@ -37,7 +37,7 @@ export class ExhibitorFairContractSummaryDto {
   })
   @IsOptional()
   @IsString()
-  pdfPath!: string | null
+  pdfPath!: string | null;
 
   @ApiPropertyOptional({
     example: 'https://assinafy.com/sign/xyz',
@@ -46,7 +46,7 @@ export class ExhibitorFairContractSummaryDto {
   })
   @IsOptional()
   @IsString()
-  signUrl!: string | null
+  signUrl!: string | null;
 
   @ApiPropertyOptional({
     example: '2026-02-10T23:59:59.000Z',
@@ -54,20 +54,21 @@ export class ExhibitorFairContractSummaryDto {
   })
   @IsOptional()
   @IsString()
-  signUrlExpiresAt!: string | null
+  signUrlExpiresAt!: string | null;
 
   @ApiPropertyOptional({
     example: '2026-02-03T12:34:56.000Z',
-    description: 'Quando o contrato foi marcado como assinado no OwnerFair (ISO).',
+    description:
+      'Quando o contrato foi marcado como assinado no OwnerFair (ISO).',
   })
   @IsOptional()
   @IsString()
-  signedAt!: string | null
+  signedAt!: string | null;
 
   @ApiProperty({
     example: '2026-02-03T12:34:56.000Z',
     description: 'Última atualização do contrato (ISO).',
   })
   @IsString()
-  updatedAt!: string
+  updatedAt!: string;
 }

@@ -10,12 +10,7 @@
  * - Documento e telefone chegam normalizados ou serão normalizados no service
  */
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsEmail,
-  IsString,
-  MinLength,
-  IsOptional,
-} from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
 
 export class RegisterExhibitorDto {
   @ApiProperty({

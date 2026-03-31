@@ -1,8 +1,8 @@
 // src/modules/public/stalls/stalls.module.ts
-import { Module } from '@nestjs/common'
-import { PrismaService } from '../../prisma/prisma.service'
-import { StallsController } from './stalls.controller'
-import { StallsService } from './stalls.service'
+import { Module } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { StallsController } from './stalls.controller';
+import { StallsService } from './stalls.service';
 
 /**
  * Módulo público de Barracas.

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty } from '@nestjs/swagger';
 
 /**
  * Resposta do login do expositor.
@@ -12,7 +12,7 @@ export class LoginExhibitorResponseDto {
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
     description: 'JWT de acesso do expositor.',
   })
-  accessToken: string
+  accessToken: string;
 
   @ApiProperty({
     description: 'Dados mínimos do Owner logado.',
@@ -25,10 +25,10 @@ export class LoginExhibitorResponseDto {
     },
   })
   owner: {
-    id: string
-    personType: 'PF' | 'PJ'
-    document: string
-    fullName?: string | null
-    email?: string | null
-  }
+    id: string;
+    personType: 'PF' | 'PJ';
+    document: string;
+    fullName?: string | null;
+    email?: string | null;
+  };
 }

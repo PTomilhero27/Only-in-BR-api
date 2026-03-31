@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common'
-import { AuditAction, AuditEntity } from '@prisma/client'
-import { PrismaTransaction } from 'src/prisma/prisma.types'
+import { Injectable } from '@nestjs/common';
+import { AuditAction, AuditEntity } from '@prisma/client';
+import { PrismaTransaction } from 'src/prisma/prisma.types';
 
 /**
  * AuditService (genérico)
@@ -24,13 +24,13 @@ export class AuditService {
   async log(
     tx: PrismaTransaction,
     params: {
-      action: AuditAction
-      entity: AuditEntity
-      entityId: string
-      actorUserId: string
-      before?: unknown | null
-      after?: unknown | null
-      meta?: unknown | null
+      action: AuditAction;
+      entity: AuditEntity;
+      entityId: string;
+      actorUserId: string;
+      before?: unknown | null;
+      after?: unknown | null;
+      meta?: unknown | null;
     },
   ) {
     return tx.auditLog.create({
@@ -43,6 +43,6 @@ export class AuditService {
         after: (params.after ?? null) as any,
         meta: (params.meta ?? null) as any,
       },
-    })
+    });
   }
 }

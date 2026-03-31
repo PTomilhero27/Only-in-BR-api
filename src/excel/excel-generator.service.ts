@@ -7,7 +7,11 @@ import { ExcelRegistry } from './types/excel-registry.type';
 
 import { sanitizeWorksheetName } from './utils/excel-sheet.utils';
 import { sortByNumber } from './utils/excel-sort.utils';
-import { getExcelNumFmt, moneyCentsToReais, toDate } from './utils/excel-format.utils';
+import {
+  getExcelNumFmt,
+  moneyCentsToReais,
+  toDate,
+} from './utils/excel-format.utils';
 import { ExcelCellType, ExcelValueFormat } from '@prisma/client';
 
 /**
@@ -55,7 +59,10 @@ export class ExcelGeneratorService {
       const ws = workbook.addWorksheet(sanitizeWorksheetName(sheet.name));
 
       // 1) CÉLULAS FIXAS
-      const cellsSorted = sortByNumber(sheet.cells, (c) => c.row * 10_000 + c.col);
+      const cellsSorted = sortByNumber(
+        sheet.cells,
+        (c) => c.row * 10_000 + c.col,
+      );
 
       for (const cell of cellsSorted) {
         const excelCell = ws.getCell(cell.row, cell.col);
@@ -91,7 +98,10 @@ export class ExcelGeneratorService {
       }
 
       // 2) TABELAS DINÂMICAS
-      const tablesSorted = sortByNumber(sheet.tables, (t) => t.anchorRow * 10_000 + t.anchorCol);
+      const tablesSorted = sortByNumber(
+        sheet.tables,
+        (t) => t.anchorRow * 10_000 + t.anchorCol,
+      );
 
       for (const table of tablesSorted) {
         const colsSorted = sortByNumber(table.columns, (c) => c.order);

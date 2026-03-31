@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FairStatus } from '@prisma/client';
 import { CreateDocumentTemplateDto } from '../dto/templates/create-document-template.dto';
@@ -8,7 +12,7 @@ import { UpsertFairContractSettingsDto } from '../dto/templates/upsert-fair-cont
 
 @Injectable()
 export class DocumentTemplatesService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateDocumentTemplateDto) {
     const created = await this.prisma.documentTemplate.create({
@@ -36,7 +40,8 @@ export class DocumentTemplatesService {
     const where: any = {};
 
     if (query.status) where.status = query.status;
-    if (typeof query.isAddendum === 'boolean') where.isAddendum = query.isAddendum;
+    if (typeof query.isAddendum === 'boolean')
+      where.isAddendum = query.isAddendum;
 
     const mode = query.mode ?? 'full';
 
@@ -105,8 +110,8 @@ export class DocumentTemplatesService {
     // monta resposta final
     return templates.map((t) => {
       const fairsCount = t.isAddendum
-        ? addendumMap.get(t.id)?.size ?? 0
-        : mainMap.get(t.id) ?? 0;
+        ? (addendumMap.get(t.id)?.size ?? 0)
+        : (mainMap.get(t.id) ?? 0);
 
       return {
         ...t,
@@ -118,7 +123,9 @@ export class DocumentTemplatesService {
   }
 
   async getById(id: string) {
-    const found = await this.prisma.documentTemplate.findUnique({ where: { id } });
+    const found = await this.prisma.documentTemplate.findUnique({
+      where: { id },
+    });
     if (!found) throw new NotFoundException('Template não encontrado.');
     return found;
   }
@@ -131,7 +138,9 @@ export class DocumentTemplatesService {
       data: {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
         ...(dto.isAddendum !== undefined ? { isAddendum: dto.isAddendum } : {}),
-        ...(dto.hasRegistration !== undefined ? { hasRegistration: dto.hasRegistration } : {}),
+        ...(dto.hasRegistration !== undefined
+          ? { hasRegistration: dto.hasRegistration }
+          : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
         ...(dto.content !== undefined ? { content: dto.content } : {}),
       },
@@ -148,8 +157,11 @@ export class DocumentTemplatesService {
     return this.prisma.documentTemplate.delete({ where: { id } });
   }
 
-
-  async upsert(fairId: string, dto: UpsertFairContractSettingsDto, actorUserId: string) {
+  async upsert(
+    fairId: string,
+    dto: UpsertFairContractSettingsDto,
+    actorUserId: string,
+  ) {
     const fair = await this.prisma.fair.findUnique({
       where: { id: fairId },
       select: { id: true, status: true },
@@ -157,17 +169,27 @@ export class DocumentTemplatesService {
     if (!fair) throw new NotFoundException('Feira não encontrada.');
 
     if (fair.status === FairStatus.FINALIZADA) {
-      throw new BadRequestException('Não é possível alterar configurações de contrato de uma feira finalizada.');
+      throw new BadRequestException(
+        'Não é possível alterar configurações de contrato de uma feira finalizada.',
+      );
     }
 
     const template = await this.prisma.documentTemplate.findUnique({
       where: { id: dto.templateId },
-      select: { id: true, isAddendum: true, status: true, title: true, updatedAt: true },
+      select: {
+        id: true,
+        isAddendum: true,
+        status: true,
+        title: true,
+        updatedAt: true,
+      },
     });
     if (!template) throw new NotFoundException('Template não encontrado.');
 
     if (template.isAddendum) {
-      throw new BadRequestException('Este template é um aditivo. Escolha um template principal (isAddendum=false).');
+      throw new BadRequestException(
+        'Este template é um aditivo. Escolha um template principal (isAddendum=false).',
+      );
     }
 
     // ✅ Regra recomendada (se quiser travar em produção):
@@ -221,7 +243,4 @@ export class DocumentTemplatesService {
     });
     if (!found) throw new NotFoundException('Template não encontrado.');
   }
-
-
-
 }

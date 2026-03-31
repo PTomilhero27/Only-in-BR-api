@@ -179,7 +179,7 @@ export class ExcelTemplatesService {
           ...(dto.name !== undefined && { name: dto.name }),
           ...(dto.status !== undefined && { status: dto.status }),
           ...(dto.scope !== undefined && {
-            scope: dto.scope as ExcelTemplateScope,
+            scope: dto.scope,
           }),
         },
       });

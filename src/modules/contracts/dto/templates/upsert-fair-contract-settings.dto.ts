@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { IsUUID } from 'class-validator'
+import { ApiProperty } from '@nestjs/swagger';
+import { IsUUID } from 'class-validator';
 
 export class UpsertFairContractSettingsDto {
   @ApiProperty({
@@ -8,5 +8,5 @@ export class UpsertFairContractSettingsDto {
     example: '8da54174-bb87-4c98-8846-52557cedea96',
   })
   @IsUUID('4', { message: 'templateId deve ser um UUID válido.' })
-  templateId: string
+  templateId: string;
 }

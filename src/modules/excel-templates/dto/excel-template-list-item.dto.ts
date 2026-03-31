@@ -11,7 +11,10 @@ export class ExcelTemplateListItemDto {
   @ApiProperty({ example: 'Relatório da Feira (Admin)' })
   name!: string;
 
-  @ApiProperty({ enum: ExcelTemplateStatus, example: ExcelTemplateStatus.ACTIVE })
+  @ApiProperty({
+    enum: ExcelTemplateStatus,
+    example: ExcelTemplateStatus.ACTIVE,
+  })
   status!: ExcelTemplateStatus;
 
   @ApiProperty({ example: '2026-02-06T12:34:56.000Z' })

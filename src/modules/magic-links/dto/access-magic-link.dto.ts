@@ -5,4 +5,3 @@ export class AccessMagicLinkDto {
   @IsString()
   accessCode: string;
 }
-

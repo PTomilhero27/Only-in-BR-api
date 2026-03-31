@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { PasswordTokenType } from '@prisma/client'
+import { ApiProperty } from '@nestjs/swagger';
+import { PasswordTokenType } from '@prisma/client';
 
 /**
  * Motivo de falha ao validar token.
@@ -17,23 +17,23 @@ export class ValidateTokenResponseDto {
    * Quando ok=false, reason explica o motivo.
    */
   @ApiProperty()
-  ok!: boolean
+  ok!: boolean;
 
   @ApiProperty({ enum: ValidateTokenFailureReason, required: false })
-  reason?: ValidateTokenFailureReason
+  reason?: ValidateTokenFailureReason;
 
   @ApiProperty({ required: false })
-  ownerId?: string
+  ownerId?: string;
 
   @ApiProperty({ enum: PasswordTokenType, required: false })
-  tokenType?: PasswordTokenType
+  tokenType?: PasswordTokenType;
 
   @ApiProperty({ required: false })
-  expiresAt?: string
+  expiresAt?: string;
 
   @ApiProperty({ required: false, nullable: true })
-  email?: string | null
+  email?: string | null;
 
   @ApiProperty({ required: false, nullable: true })
-  displayName?: string | null
+  displayName?: string | null;
 }

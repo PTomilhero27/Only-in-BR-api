@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 import {
@@ -478,7 +476,9 @@ export class ExhibitorFairsService {
     if (!ownerFair)
       throw new BadRequestException('Você não está vinculado a esta feira.');
     if (ownerFair.fair.status === FairStatus.FINALIZADA) {
-      throw new BadRequestException('Não é possível vincular barracas em uma feira finalizada.');
+      throw new BadRequestException(
+        'Não é possível vincular barracas em uma feira finalizada.',
+      );
     }
 
     const stall = await this.prisma.stall.findFirst({
@@ -629,7 +629,9 @@ export class ExhibitorFairsService {
     if (!ownerFair)
       throw new BadRequestException('Você não está vinculado a esta feira.');
     if (ownerFair.fair.status === FairStatus.FINALIZADA) {
-      throw new BadRequestException('Não é possível desvincular barracas de uma feira finalizada.');
+      throw new BadRequestException(
+        'Não é possível desvincular barracas de uma feira finalizada.',
+      );
     }
 
     const stall = await this.prisma.stall.findFirst({

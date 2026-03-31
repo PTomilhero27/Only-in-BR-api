@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MinLength } from 'class-validator'
+import { IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 /**
  * DTO para definição de senha via token.
@@ -9,7 +9,7 @@ export class SetPasswordDto {
    */
   @IsString()
   @IsNotEmpty()
-  token!: string
+  token!: string;
 
   /**
    * Nova senha do expositor.
@@ -17,5 +17,5 @@ export class SetPasswordDto {
    */
   @IsString()
   @MinLength(8)
-  password!: string
+  password!: string;
 }

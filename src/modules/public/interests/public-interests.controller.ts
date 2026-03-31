@@ -36,8 +36,7 @@ export class PublicInterestsController {
   })
   @ApiOkResponse({ type: PublicOwnerResponseDto })
   @ApiBadRequestResponse({
-    description:
-      'Payload inválido ou já existe cadastro com este CPF/CNPJ.',
+    description: 'Payload inválido ou já existe cadastro com este CPF/CNPJ.',
   })
   async upsert(
     @Body() dto: UpsertPublicInterestDto,

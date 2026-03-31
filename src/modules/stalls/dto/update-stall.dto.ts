@@ -1,8 +1,8 @@
 // src/modules/stalls/dto/update-stall.dto.ts
-import { ApiProperty } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
-import { ValidateNested } from 'class-validator'
-import { CreateStallDto } from './create-stall.dto'
+import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { ValidateNested } from 'class-validator';
+import { CreateStallDto } from './create-stall.dto';
 
 /**
  * DTO de edição de barraca.
@@ -15,10 +15,10 @@ import { CreateStallDto } from './create-stall.dto'
  */
 export class UpdateStallDto extends CreateStallDto {
   @ApiProperty({
-    type: (CreateStallDto as any),
+    type: CreateStallDto as any,
     description: 'Payload completo da barraca (mesmo contrato do create).',
   })
   @ValidateNested()
   @Type(() => Object)
-  declare stall: any
+  declare stall: any;
 }

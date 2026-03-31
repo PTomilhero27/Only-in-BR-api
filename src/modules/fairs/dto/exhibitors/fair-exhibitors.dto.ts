@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   BankAccountType,
   OwnerFairPaymentStatus,
@@ -6,7 +6,7 @@ import {
   PersonType,
   StallSize,
   StallType,
-} from '@prisma/client'
+} from '@prisma/client';
 
 /**
  * DTO de header da feira para a tela “Barracas vinculadas”.
@@ -17,34 +17,34 @@ import {
  */
 export class FairHeaderDto {
   @ApiProperty({ example: '0f9d6b6b-7a0c-4b2b-8d6d-91a1c5a5b63d' })
-  id!: string
+  id!: string;
 
   @ApiProperty({ example: 'Feira gastronômica botecagem' })
-  name!: string
+  name!: string;
 
   @ApiProperty({ example: 'ATIVA' })
-  status!: string
+  status!: string;
 
   @ApiProperty({ example: 'Praça Central, 100 - Centro, Goiânia/GO' })
-  address!: string
+  address!: string;
 
   @ApiProperty({
     description: 'Capacidade total de barracas permitidas na feira.',
     example: 60,
   })
-  stallsCapacity!: number
+  stallsCapacity!: number;
 
   @ApiProperty({
     description: 'Total de barracas reservadas (soma de OwnerFair.stallsQty).',
     example: 12,
   })
-  stallsReserved!: number
+  stallsReserved!: number;
 
   @ApiProperty({
     description: 'Total de barracas restantes (capacity - reserved).',
     example: 48,
   })
-  stallsRemaining!: number
+  stallsRemaining!: number;
 
   @ApiProperty({
     description: 'Ocorrências (dias/horários) da feira, ordenadas por data.',
@@ -57,16 +57,16 @@ export class FairHeaderDto {
     ],
   })
   occurrences!: Array<{
-    id: string
-    startsAt: string
-    endsAt: string
-  }>
+    id: string;
+    startsAt: string;
+    endsAt: string;
+  }>;
 
   @ApiProperty({ example: '2026-01-10T12:30:00.000Z' })
-  createdAt!: string
+  createdAt!: string;
 
   @ApiProperty({ example: '2026-01-11T09:00:00.000Z' })
-  updatedAt!: string
+  updatedAt!: string;
 }
 
 /**
@@ -78,47 +78,48 @@ export class FairHeaderDto {
  */
 export class FairExhibitorOwnerDto {
   @ApiProperty({ example: 'ckv8l0t4w0001z9abcd1234xy' })
-  id!: string
+  id!: string;
 
   @ApiProperty({ enum: PersonType, example: PersonType.PF })
-  personType!: PersonType
+  personType!: PersonType;
 
   @ApiProperty({
     description: 'CPF/CNPJ normalizado (somente dígitos).',
     example: '06877511107',
   })
-  document!: string
+  document!: string;
 
   @ApiPropertyOptional({ example: 'Heloisa Lima Vale' })
-  fullName?: string | null
+  fullName?: string | null;
 
   @ApiPropertyOptional({ example: 'helo14vale@gmail.com' })
-  email?: string | null
+  email?: string | null;
 
   @ApiPropertyOptional({ example: '62916604667' })
-  phone?: string | null
+  phone?: string | null;
 
   // ---------------------------------------------------------
   // Endereço (seção “Endereço” do modal)
   // ---------------------------------------------------------
 
   @ApiPropertyOptional({
-    description: 'Endereço completo em formato livre (quando fornecido pelo expositor).',
+    description:
+      'Endereço completo em formato livre (quando fornecido pelo expositor).',
     example: 'Rua X, Setor Y, Goiânia - GO',
   })
-  addressFull?: string | null
+  addressFull?: string | null;
 
   @ApiPropertyOptional({ example: 'Goiânia' })
-  addressCity?: string | null
+  addressCity?: string | null;
 
   @ApiPropertyOptional({ example: 'GO' })
-  addressState?: string | null
+  addressState?: string | null;
 
   @ApiPropertyOptional({ example: '74000-000' })
-  addressZipcode?: string | null
+  addressZipcode?: string | null;
 
   @ApiPropertyOptional({ example: '123' })
-  addressNumber?: string | null
+  addressNumber?: string | null;
 
   // ---------------------------------------------------------
   // Pagamento (seção “Pagamento” do modal)
@@ -128,31 +129,34 @@ export class FairExhibitorOwnerDto {
     description: 'Chave Pix cadastrada pelo expositor.',
     example: 'helo14vale@gmail.com',
   })
-  pixKey?: string | null
+  pixKey?: string | null;
 
   @ApiPropertyOptional({ example: 'Banco do Brasil' })
-  bankName?: string | null
+  bankName?: string | null;
 
   @ApiPropertyOptional({ example: '1234' })
-  bankAgency?: string | null
+  bankAgency?: string | null;
 
   @ApiPropertyOptional({ example: '123456-7' })
-  bankAccount?: string | null
+  bankAccount?: string | null;
 
-  @ApiPropertyOptional({ enum: BankAccountType, example: BankAccountType.CORRENTE })
-  bankAccountType?: BankAccountType | null
+  @ApiPropertyOptional({
+    enum: BankAccountType,
+    example: BankAccountType.CORRENTE,
+  })
+  bankAccountType?: BankAccountType | null;
 
   @ApiPropertyOptional({
     description: 'Documento do titular da conta (se diferente do expositor).',
     example: '06877511107',
   })
-  bankHolderDoc?: string | null
+  bankHolderDoc?: string | null;
 
   @ApiPropertyOptional({
     description: 'Nome do titular da conta (se diferente do expositor).',
     example: 'Heloisa Lima Vale',
   })
-  bankHolderName?: string | null
+  bankHolderName?: string | null;
 
   // ---------------------------------------------------------
   // Extra (útil para ficha/contrato e futuras telas)
@@ -162,7 +166,7 @@ export class FairExhibitorOwnerDto {
     description: 'Descrição geral do expositor/atividade (quando preenchida).',
     example: 'Trabalho com pastel e caldo de cana.',
   })
-  stallsDescription?: string | null
+  stallsDescription?: string | null;
 }
 
 /**
@@ -172,19 +176,19 @@ export class FairExhibitorOwnerDto {
  */
 export class FairExhibitorSlotDto {
   @ApiProperty({ enum: StallSize, example: StallSize.SIZE_3X3 })
-  stallSize!: StallSize
+  stallSize!: StallSize;
 
   @ApiProperty({
     description: 'Quantidade comprada para este tamanho.',
     example: 2,
   })
-  qty!: number
+  qty!: number;
 
   @ApiProperty({
     description: 'Valor unitário em centavos (evita ponto flutuante).',
     example: 35000,
   })
-  unitPriceCents!: number
+  unitPriceCents!: number;
 }
 
 /**
@@ -194,28 +198,28 @@ export class FairExhibitorSlotDto {
  */
 export class FairLinkedStallDto {
   @ApiProperty({ example: 'ckv8l0t4w0001z9abcdstall01' })
-  id!: string
+  id!: string;
 
   @ApiProperty({ example: 'Pastel da Nega' })
-  pdvName!: string
+  pdvName!: string;
 
   @ApiProperty({ enum: StallType, example: StallType.OPEN })
-  stallType!: StallType
+  stallType!: StallType;
 
   @ApiProperty({ enum: StallSize, example: StallSize.SIZE_3X3 })
-  stallSize!: StallSize
+  stallSize!: StallSize;
 
   @ApiProperty({ example: 2 })
-  machinesQty!: number
+  machinesQty!: number;
 
   @ApiPropertyOptional({ example: 'Banner Pastel da Nega' })
-  bannerName?: string | null
+  bannerName?: string | null;
 
   @ApiPropertyOptional({ example: 'Salgados' })
-  mainCategory?: string | null
+  mainCategory?: string | null;
 
   @ApiProperty({ example: 3 })
-  teamQty!: number
+  teamQty!: number;
 }
 
 /**
@@ -229,31 +233,31 @@ export class FairPaymentInstallmentDto {
     description: 'Número da parcela (1..N).',
     example: 1,
   })
-  number!: number
+  number!: number;
 
   @ApiProperty({
     description: 'Data prevista do pagamento (ISO).',
     example: '2026-02-10T00:00:00.000Z',
   })
-  dueDate!: string
+  dueDate!: string;
 
   @ApiProperty({
     description: 'Valor previsto da parcela (centavos).',
     example: 50000,
   })
-  amountCents!: number
+  amountCents!: number;
 
   @ApiPropertyOptional({
     description: 'Quando foi pago (ISO). Null => ainda não pago.',
     example: '2026-02-10T12:00:00.000Z',
   })
-  paidAt?: string | null
+  paidAt?: string | null;
 
   @ApiPropertyOptional({
     description: 'Valor efetivamente pago (centavos).',
     example: 50000,
   })
-  paidAmountCents?: number | null
+  paidAmountCents?: number | null;
 }
 
 /**
@@ -267,48 +271,55 @@ export class FairPaymentInstallmentDto {
  * - Se ficar pesado no futuro, podemos colocar um flag para “expandir”.
  */
 export class FairPaymentSummaryDto {
-  @ApiProperty({ enum: OwnerFairPaymentStatus, example: OwnerFairPaymentStatus.PARTIALLY_PAID })
-  status!: OwnerFairPaymentStatus
+  @ApiProperty({
+    enum: OwnerFairPaymentStatus,
+    example: OwnerFairPaymentStatus.PARTIALLY_PAID,
+  })
+  status!: OwnerFairPaymentStatus;
 
   @ApiProperty({
     description: 'Valor total acordado (centavos).',
     example: 150000,
   })
-  totalCents!: number
+  totalCents!: number;
 
   @ApiProperty({
     description: 'Quantidade total de parcelas (1 = à vista).',
     example: 3,
   })
-  installmentsCount!: number
+  installmentsCount!: number;
 
   @ApiProperty({
     description: 'Quantidade de parcelas pagas (paidAt != null).',
     example: 1,
   })
-  paidCount!: number
+  paidCount!: number;
 
   @ApiPropertyOptional({
     description: 'Próxima data de vencimento em aberto (ISO).',
     example: '2026-03-10T00:00:00.000Z',
   })
-  nextDueDate?: string | null
+  nextDueDate?: string | null;
 
   @ApiProperty({
     description: 'Lista com todas as datas de vencimento combinadas (ISO).',
-    example: ['2026-02-10T00:00:00.000Z', '2026-03-10T00:00:00.000Z', '2026-04-10T00:00:00.000Z'],
+    example: [
+      '2026-02-10T00:00:00.000Z',
+      '2026-03-10T00:00:00.000Z',
+      '2026-04-10T00:00:00.000Z',
+    ],
     type: [String],
   })
-  dueDates!: string[]
+  dueDates!: string[];
 
   @ApiProperty({
     description: 'Quantidade de parcelas vencidas e não pagas.',
     example: 0,
   })
-  overdueCount!: number
+  overdueCount!: number;
 
   @ApiPropertyOptional({ type: [FairPaymentInstallmentDto] })
-  installments?: FairPaymentInstallmentDto[]
+  installments?: FairPaymentInstallmentDto[];
 }
 
 /**
@@ -320,53 +331,53 @@ export class FairPaymentSummaryDto {
  */
 export class FairExhibitorRowDto {
   @ApiProperty({ example: 'ckv8l0t4w0001z9abownerfair1' })
-  ownerFairId!: string
+  ownerFairId!: string;
 
   @ApiProperty({ example: '0f9d6b6b-7a0c-4b2b-8d6d-91a1c5a5b63d' })
-  fairId!: string
+  fairId!: string;
 
   @ApiProperty({ type: FairExhibitorOwnerDto })
-  owner!: FairExhibitorOwnerDto
+  owner!: FairExhibitorOwnerDto;
 
   @ApiProperty({
     description: 'Total de barracas compradas nesta feira.',
     example: 2,
   })
-  stallsQtyPurchased!: number
+  stallsQtyPurchased!: number;
 
   @ApiProperty({ type: [FairExhibitorSlotDto] })
-  stallSlots!: FairExhibitorSlotDto[]
+  stallSlots!: FairExhibitorSlotDto[];
 
   @ApiProperty({
     description: 'Total de barracas já vinculadas na feira.',
     example: 1,
   })
-  stallsQtyLinked!: number
+  stallsQtyLinked!: number;
 
   @ApiProperty({ type: [FairLinkedStallDto] })
-  linkedStalls!: FairLinkedStallDto[]
+  linkedStalls!: FairLinkedStallDto[];
 
   @ApiProperty({ enum: OwnerFairStatus, example: OwnerFairStatus.SELECIONADO })
-  status!: OwnerFairStatus
+  status!: OwnerFairStatus;
 
   @ApiProperty({
     description:
       'Indica se o expositor está completo (pagamento OK + contrato assinado + vinculou todas as barracas compradas).',
     example: false,
   })
-  isComplete!: boolean
+  isComplete!: boolean;
 
   @ApiPropertyOptional({
     description: 'Data/hora de assinatura do contrato (ISO).',
     example: '2026-02-01T14:30:00.000Z',
   })
-  contractSignedAt?: string | null
+  contractSignedAt?: string | null;
 
   @ApiPropertyOptional({
     description: 'Resumo do plano de pagamento (se existir).',
     type: FairPaymentSummaryDto,
   })
-  payment?: FairPaymentSummaryDto | null
+  payment?: FairPaymentSummaryDto | null;
 }
 
 /**
@@ -376,8 +387,8 @@ export class FairExhibitorRowDto {
  */
 export class FairExhibitorsResponseDto {
   @ApiProperty({ type: FairHeaderDto })
-  fair!: FairHeaderDto
+  fair!: FairHeaderDto;
 
   @ApiProperty({ type: [FairExhibitorRowDto] })
-  items!: FairExhibitorRowDto[]
+  items!: FairExhibitorRowDto[];
 }

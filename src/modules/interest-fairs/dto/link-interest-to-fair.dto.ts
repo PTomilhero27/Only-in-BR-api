@@ -1,7 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { ArrayMinSize, IsArray, IsString, ValidateNested } from 'class-validator'
-import { Type } from 'class-transformer'
-import { OwnerFairPurchaseDto } from './owner-fair-purchase.dto'
+import { ApiProperty } from '@nestjs/swagger';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { OwnerFairPurchaseDto } from './owner-fair-purchase.dto';
 
 /**
  * DTO do fluxo do Admin:
@@ -14,7 +19,7 @@ export class LinkInterestToFairDto {
     description: 'ID da feira (Fair).',
   })
   @IsString()
-  fairId: string
+  fairId: string;
 
   @ApiProperty({
     type: [OwnerFairPurchaseDto],
@@ -37,5 +42,5 @@ export class LinkInterestToFairDto {
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => OwnerFairPurchaseDto)
-  purchases: OwnerFairPurchaseDto[]
+  purchases: OwnerFairPurchaseDto[];
 }

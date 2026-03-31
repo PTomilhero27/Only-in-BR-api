@@ -1,5 +1,3 @@
-
-
 /**
  * ✅ Tipos Runtime do Template
  *
@@ -11,7 +9,7 @@
  * - Permite mapear/transformar caso o schema evolua
  */
 
-import { ExcelCellType, ExcelDataset, ExcelValueFormat } from "@prisma/client";
+import { ExcelCellType, ExcelDataset, ExcelValueFormat } from '@prisma/client';
 
 export type ExcelTemplateRuntime = {
   id: string;

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator'
+import { IsNotEmpty, IsString } from 'class-validator';
 
 /**
  * DTO para validação de token temporário.
@@ -9,5 +9,5 @@ export class ValidateTokenDto {
    */
   @IsString()
   @IsNotEmpty()
-  token!: string
+  token!: string;
 }

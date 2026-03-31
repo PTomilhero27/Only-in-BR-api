@@ -148,7 +148,9 @@ export class ContractsAssinafyService {
     return String(signerId);
   }
 
-  private async assinafyFindSignerByEmail(email: string): Promise<string | null> {
+  private async assinafyFindSignerByEmail(
+    email: string,
+  ): Promise<string | null> {
     const url =
       `${this.assinafyBaseUrl()}/accounts/${this.assinafyAccountId()}/signers?email=` +
       encodeURIComponent(email.trim());
@@ -237,7 +239,9 @@ export class ContractsAssinafyService {
 
     if (!res.ok) {
       throw new BadRequestException(
-        data?.message || data?.error || `Erro ao criar documento (${res.status})`,
+        data?.message ||
+          data?.error ||
+          `Erro ao criar documento (${res.status})`,
       );
     }
 
@@ -258,13 +262,16 @@ export class ContractsAssinafyService {
     const started = Date.now();
 
     while (Date.now() - started < timeoutMs) {
-      const res = await fetch(`${this.assinafyBaseUrl()}/documents/${documentId}`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.assinafyKey()}`,
-          Accept: 'application/json',
+      const res = await fetch(
+        `${this.assinafyBaseUrl()}/documents/${documentId}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${this.assinafyKey()}`,
+            Accept: 'application/json',
+          },
         },
-      });
+      );
 
       const payload = await res.json().catch(() => ({}));
 
@@ -326,98 +333,195 @@ export class ContractsAssinafyService {
    * - se signUrl estiver preenchida, BLOQUEIA.
    * - se contractSignedAt estiver preenchido, BLOQUEIA.
    */
-/**
- * createOrReuseSignUrl
- *
- * Responsabilidade:
- * - Garantir que existe um Contract para o OwnerFair
- * - Garantir que existe PDF salvo (pdfPath)
- * - Criar/reutilizar signer
- * - Criar/reutilizar document
- * - Criar assignment virtual e derivar signUrl
- *
- * Regra de robustez para o front:
- * - Se signUrl já existir, RETORNA (reused=true), não lança erro.
- * - Se já assinou (contractSignedAt ou Contract.signedAt), RETORNA (alreadySigned=true).
- *
- * Motivo:
- * - O front pode ter timeout/abort e reenviar request. Isso não pode quebrar UX nem causar “travamento”.
- */
-async createOrReuseSignUrl(
-  dto: CreateAssinafySignUrlDto,
-): Promise<CreateAssinafySignUrlResponseDto & { reused?: boolean; alreadySigned?: boolean }> {
-  // 1) valida vínculo OwnerFair (âncora)
-  const ownerFair = await this.prisma.ownerFair.findUnique({
-    where: { ownerId_fairId: { ownerId: dto.ownerId, fairId: dto.fairId } },
-    select: {
-      id: true,
-      status: true,
-      contractSignedAt: true,
-      owner: { select: { document: true } },
-      fair: { select: { status: true, contractSettings: { select: { templateId: true } } } },
-    },
-  });
-
-  if (!ownerFair) {
-    throw new NotFoundException(
-      'Expositor não está vinculado a esta feira (OwnerFair não encontrado).',
-    );
-  }
-
-  if (ownerFair.fair.status === FairStatus.FINALIZADA) {
-    throw new BadRequestException('Não é possível gerar contrato para uma feira finalizada.');
-  }
-
-  const mainTemplateId = ownerFair.fair?.contractSettings?.templateId;
-  if (!mainTemplateId) {
-    throw new BadRequestException(
-      'A feira não possui contrato principal configurado (FairContractSettings).',
-    );
-  }
-
-  // 2) garante Contract (1 por ownerFairId)
-  const contract = await this.prisma.contract.upsert({
-    where: { ownerFairId: ownerFair.id },
-    update: {
-      templateId: mainTemplateId,
-    },
-    create: {
-      ownerFairId: ownerFair.id,
-      templateId: mainTemplateId,
-    },
-    select: {
-      id: true,
-      pdfPath: true,
-      signedAt: true,
-      assinafyDocumentId: true,
-      assinafySignerId: true,
-      signUrl: true,
-      signUrlExpiresAt: true,
-    },
-  });
-
   /**
-   * ✅ Caso já esteja assinado:
-   * Retornamos OK para o front, para ele parar de tentar e atualizar a tela.
+   * createOrReuseSignUrl
+   *
+   * Responsabilidade:
+   * - Garantir que existe um Contract para o OwnerFair
+   * - Garantir que existe PDF salvo (pdfPath)
+   * - Criar/reutilizar signer
+   * - Criar/reutilizar document
+   * - Criar assignment virtual e derivar signUrl
+   *
+   * Regra de robustez para o front:
+   * - Se signUrl já existir, RETORNA (reused=true), não lança erro.
+   * - Se já assinou (contractSignedAt ou Contract.signedAt), RETORNA (alreadySigned=true).
+   *
+   * Motivo:
+   * - O front pode ter timeout/abort e reenviar request. Isso não pode quebrar UX nem causar “travamento”.
    */
-  if (ownerFair.contractSignedAt || contract.signedAt) {
-    return {
-      signUrl: contract.signUrl ?? "",
-      contractId: contract.id,
-      assinafyDocumentId: contract.assinafyDocumentId ?? "",
-      assinafySignerId: contract.assinafySignerId ?? "",
-      reused: true,
-      alreadySigned: true,
-    };
-  }
+  async createOrReuseSignUrl(dto: CreateAssinafySignUrlDto): Promise<
+    CreateAssinafySignUrlResponseDto & {
+      reused?: boolean;
+      alreadySigned?: boolean;
+    }
+  > {
+    // 1) valida vínculo OwnerFair (âncora)
+    const ownerFair = await this.prisma.ownerFair.findUnique({
+      where: { ownerId_fairId: { ownerId: dto.ownerId, fairId: dto.fairId } },
+      select: {
+        id: true,
+        status: true,
+        contractSignedAt: true,
+        owner: { select: { document: true } },
+        fair: {
+          select: {
+            status: true,
+            contractSettings: { select: { templateId: true } },
+          },
+        },
+      },
+    });
 
-  /**
-   * ✅ Caso já exista link:
-   * NÃO lançar erro. Apenas devolver o que já foi gerado.
-   * Isso resolve: “criou mas o front não recebeu resposta”.
-   */
-  if (contract.signUrl) {
-    // garante status operacional coerente (se ainda não assinou)
+    if (!ownerFair) {
+      throw new NotFoundException(
+        'Expositor não está vinculado a esta feira (OwnerFair não encontrado).',
+      );
+    }
+
+    if (ownerFair.fair.status === FairStatus.FINALIZADA) {
+      throw new BadRequestException(
+        'Não é possível gerar contrato para uma feira finalizada.',
+      );
+    }
+
+    const mainTemplateId = ownerFair.fair?.contractSettings?.templateId;
+    if (!mainTemplateId) {
+      throw new BadRequestException(
+        'A feira não possui contrato principal configurado (FairContractSettings).',
+      );
+    }
+
+    // 2) garante Contract (1 por ownerFairId)
+    const contract = await this.prisma.contract.upsert({
+      where: { ownerFairId: ownerFair.id },
+      update: {
+        templateId: mainTemplateId,
+      },
+      create: {
+        ownerFairId: ownerFair.id,
+        templateId: mainTemplateId,
+      },
+      select: {
+        id: true,
+        pdfPath: true,
+        signedAt: true,
+        assinafyDocumentId: true,
+        assinafySignerId: true,
+        signUrl: true,
+        signUrlExpiresAt: true,
+      },
+    });
+
+    /**
+     * ✅ Caso já esteja assinado:
+     * Retornamos OK para o front, para ele parar de tentar e atualizar a tela.
+     */
+    if (ownerFair.contractSignedAt || contract.signedAt) {
+      return {
+        signUrl: contract.signUrl ?? '',
+        contractId: contract.id,
+        assinafyDocumentId: contract.assinafyDocumentId ?? '',
+        assinafySignerId: contract.assinafySignerId ?? '',
+        reused: true,
+        alreadySigned: true,
+      };
+    }
+
+    /**
+     * ✅ Caso já exista link:
+     * NÃO lançar erro. Apenas devolver o que já foi gerado.
+     * Isso resolve: “criou mas o front não recebeu resposta”.
+     */
+    if (contract.signUrl) {
+      // garante status operacional coerente (se ainda não assinou)
+      if (ownerFair.status !== OwnerFairStatus.AGUARDANDO_ASSINATURA) {
+        await this.prisma.ownerFair.update({
+          where: { id: ownerFair.id },
+          data: { status: OwnerFairStatus.AGUARDANDO_ASSINATURA },
+        });
+      }
+
+      return {
+        signUrl: contract.signUrl,
+        contractId: contract.id,
+        assinafyDocumentId: contract.assinafyDocumentId ?? '',
+        assinafySignerId: contract.assinafySignerId ?? '',
+        reused: true,
+      };
+    }
+
+    // 3) precisa ter pdfPath
+    if (!contract.pdfPath) {
+      throw new BadRequestException(
+        'pdfPath ainda está vazio. Gere e envie o PDF para o Storage antes de criar o documento na Assinafy.',
+      );
+    }
+
+    // 4) signer (cria/reutiliza)
+    let signerId = contract.assinafySignerId;
+    if (!signerId) {
+      const signer = await this.assinafyGetOrCreateSigner({
+        name: dto.name,
+        email: dto.email,
+      });
+      signerId = signer.signerId;
+
+      await this.prisma.contract.update({
+        where: { id: contract.id },
+        data: { assinafySignerId: signerId },
+      });
+    }
+
+    // 5) documentId (cria/reutiliza)
+    let documentId = contract.assinafyDocumentId;
+    if (!documentId) {
+      const pdfBuffer = await this.downloadPdfFromStorage(contract.pdfPath);
+
+      const safeName = this.normalizeKey(dto.name || 'Expositor');
+      const safeBrand = this.normalizeKey(dto.brand || 'sem_marca');
+      const ownerDoc = (ownerFair.owner.document || 'sem_doc').replace(
+        /\D/g,
+        '',
+      );
+      const filename = `Contrato_${ownerDoc}_${safeBrand}_${safeName}.pdf`;
+
+      documentId = await this.assinafyCreateDocumentFromPdf({
+        title: `Contrato_${ownerDoc}`,
+        pdfBuffer,
+        filename,
+      });
+
+      await this.prisma.contract.update({
+        where: { id: contract.id },
+        data: { assinafyDocumentId: documentId },
+      });
+    }
+
+    // 6) aguarda documento pronto
+    await this.assinafyWaitDocumentReady(documentId);
+
+    // 7) cria assignment e gera signUrl
+    const { signUrl } = await this.assinafyCreateAssignmentVirtual({
+      documentId,
+      signerId,
+      expirationISO: dto.expiresAtISO,
+    });
+
+    const signUrlExpiresAt = dto.expiresAtISO
+      ? new Date(dto.expiresAtISO)
+      : null;
+
+    // 8) persiste link + expiração
+    await this.prisma.contract.update({
+      where: { id: contract.id },
+      data: {
+        signUrl,
+        signUrlExpiresAt: signUrlExpiresAt ?? undefined,
+      },
+    });
+
+    // 9) atualiza status operacional (assinatura pendente)
     if (ownerFair.status !== OwnerFairStatus.AGUARDANDO_ASSINATURA) {
       await this.prisma.ownerFair.update({
         where: { id: ownerFair.id },
@@ -426,94 +530,11 @@ async createOrReuseSignUrl(
     }
 
     return {
-      signUrl: contract.signUrl,
+      signUrl,
       contractId: contract.id,
-      assinafyDocumentId: contract.assinafyDocumentId ?? "",
-      assinafySignerId: contract.assinafySignerId ?? "",
-      reused: true,
+      assinafyDocumentId: documentId,
+      assinafySignerId: signerId,
+      reused: false,
     };
   }
-
-  // 3) precisa ter pdfPath
-  if (!contract.pdfPath) {
-    throw new BadRequestException(
-      'pdfPath ainda está vazio. Gere e envie o PDF para o Storage antes de criar o documento na Assinafy.',
-    );
-  }
-
-  // 4) signer (cria/reutiliza)
-  let signerId = contract.assinafySignerId;
-  if (!signerId) {
-    const signer = await this.assinafyGetOrCreateSigner({
-      name: dto.name,
-      email: dto.email,
-    });
-    signerId = signer.signerId;
-
-    await this.prisma.contract.update({
-      where: { id: contract.id },
-      data: { assinafySignerId: signerId },
-    });
-  }
-
-  // 5) documentId (cria/reutiliza)
-  let documentId = contract.assinafyDocumentId;
-  if (!documentId) {
-    const pdfBuffer = await this.downloadPdfFromStorage(contract.pdfPath);
-
-    const safeName = this.normalizeKey(dto.name || 'Expositor');
-    const safeBrand = this.normalizeKey(dto.brand || 'sem_marca');
-    const ownerDoc = (ownerFair.owner.document || 'sem_doc').replace(/\D/g, '');
-    const filename = `Contrato_${ownerDoc}_${safeBrand}_${safeName}.pdf`;
-
-    documentId = await this.assinafyCreateDocumentFromPdf({
-      title: `Contrato_${ownerDoc}`,
-      pdfBuffer,
-      filename,
-    });
-
-    await this.prisma.contract.update({
-      where: { id: contract.id },
-      data: { assinafyDocumentId: documentId },
-    });
-  }
-
-  // 6) aguarda documento pronto
-  await this.assinafyWaitDocumentReady(documentId);
-
-  // 7) cria assignment e gera signUrl
-  const { signUrl } = await this.assinafyCreateAssignmentVirtual({
-    documentId,
-    signerId,
-    expirationISO: dto.expiresAtISO,
-  });
-
-  const signUrlExpiresAt = dto.expiresAtISO ? new Date(dto.expiresAtISO) : null;
-
-  // 8) persiste link + expiração
-  await this.prisma.contract.update({
-    where: { id: contract.id },
-    data: {
-      signUrl,
-      signUrlExpiresAt: signUrlExpiresAt ?? undefined,
-    },
-  });
-
-  // 9) atualiza status operacional (assinatura pendente)
-  if (ownerFair.status !== OwnerFairStatus.AGUARDANDO_ASSINATURA) {
-    await this.prisma.ownerFair.update({
-      where: { id: ownerFair.id },
-      data: { status: OwnerFairStatus.AGUARDANDO_ASSINATURA },
-    });
-  }
-
-  return {
-    signUrl,
-    contractId: contract.id,
-    assinafyDocumentId: documentId,
-    assinafySignerId: signerId,
-    reused: false,
-  };
-}
-
 }

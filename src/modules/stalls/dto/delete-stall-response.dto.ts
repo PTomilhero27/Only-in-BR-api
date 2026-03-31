@@ -1,6 +1,6 @@
 // src/modules/stalls/dto/delete-stall-response.dto.ts
-import { ApiProperty } from '@nestjs/swagger'
-import { IsBoolean } from 'class-validator'
+import { ApiProperty } from '@nestjs/swagger';
+import { IsBoolean } from 'class-validator';
 
 /**
  * Resposta padrão para exclusão.
@@ -8,5 +8,5 @@ import { IsBoolean } from 'class-validator'
 export class DeleteStallResponseDto {
   @ApiProperty({ example: true, description: 'Indica sucesso da operação.' })
   @IsBoolean({ message: 'ok deve ser boolean' })
-  ok!: boolean
+  ok!: boolean;
 }

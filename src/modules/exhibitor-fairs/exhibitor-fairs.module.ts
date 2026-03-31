@@ -4,6 +4,6 @@ import { ExhibitorFairsService } from './exhibitor-fairs.service';
 
 @Module({
   controllers: [ExhibitorFairsController],
-  providers: [ExhibitorFairsService]
+  providers: [ExhibitorFairsService],
 })
 export class ExhibitorFairsModule {}

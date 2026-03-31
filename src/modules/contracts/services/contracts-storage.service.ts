@@ -70,73 +70,118 @@ export class ContractsStorageService {
    *   NÃO permite novo upload (congela a versão do PDF que a Assinafy vai assinar)
    * - Salva Contract.pdfPath com path versionado (evita cache e arquivo antigo)
    */
-async uploadContractPdf(params: {
-  contractId?: string;
-  fairId: string;
-  ownerId: string;
-  templateId: string;
-  fileBuffer: Buffer;
-}) {
-  if (!params.fileBuffer?.length) {
-    throw new BadRequestException('Arquivo vazio.');
-  }
+  async uploadContractPdf(params: {
+    contractId?: string;
+    fairId: string;
+    ownerId: string;
+    templateId: string;
+    fileBuffer: Buffer;
+  }) {
+    if (!params.fileBuffer?.length) {
+      throw new BadRequestException('Arquivo vazio.');
+    }
 
-  const ownerFair = await this.prisma.ownerFair.findFirst({
-    where: { fairId: params.fairId, ownerId: params.ownerId },
-    select: { id: true, fair: { select: { status: true } }, owner: { select: { document: true } } },
-  });
+    const ownerFair = await this.prisma.ownerFair.findFirst({
+      where: { fairId: params.fairId, ownerId: params.ownerId },
+      select: {
+        id: true,
+        fair: { select: { status: true } },
+        owner: { select: { document: true } },
+      },
+    });
 
-  if (!ownerFair) {
-    throw new NotFoundException(
-      'Expositor não está vinculado a esta feira (OwnerFair não encontrado).',
-    );
-  }
+    if (!ownerFair) {
+      throw new NotFoundException(
+        'Expositor não está vinculado a esta feira (OwnerFair não encontrado).',
+      );
+    }
 
-  if (ownerFair.fair.status === FairStatus.FINALIZADA) {
-    throw new BadRequestException('Não é permitido alterar contratos de uma feira finalizada.');
-  }
+    if (ownerFair.fair.status === FairStatus.FINALIZADA) {
+      throw new BadRequestException(
+        'Não é permitido alterar contratos de uma feira finalizada.',
+      );
+    }
 
-  const ownerDocument = ownerFair.owner.document;
-  if (!ownerDocument) {
-    throw new BadRequestException('Owner não possui documento cadastrado.');
-  }
+    const ownerDocument = ownerFair.owner.document;
+    if (!ownerDocument) {
+      throw new BadRequestException('Owner não possui documento cadastrado.');
+    }
 
-  const template = await this.prisma.documentTemplate.findUnique({
-    where: { id: params.templateId },
-    select: { id: true, status: true, isAddendum: true },
-  });
+    const template = await this.prisma.documentTemplate.findUnique({
+      where: { id: params.templateId },
+      select: { id: true, status: true, isAddendum: true },
+    });
 
-  if (!template) {
-    throw new NotFoundException('Template de contrato não encontrado.');
-  }
+    if (!template) {
+      throw new NotFoundException('Template de contrato não encontrado.');
+    }
 
-  if (template.isAddendum) {
-    throw new BadRequestException(
-      'Template informado é um aditivo. Este upload é apenas do contrato principal.',
-    );
-  }
+    if (template.isAddendum) {
+      throw new BadRequestException(
+        'Template informado é um aditivo. Este upload é apenas do contrato principal.',
+      );
+    }
 
-  const fairSettings = await this.prisma.fairContractSettings.findUnique({
-    where: { fairId: params.fairId },
-    select: { templateId: true },
-  });
+    const fairSettings = await this.prisma.fairContractSettings.findUnique({
+      where: { fairId: params.fairId },
+      select: { templateId: true },
+    });
 
-  if (!fairSettings?.templateId) {
-    throw new BadRequestException(
-      'A feira não possui um contrato principal configurado (FairContractSettings).',
-    );
-  }
+    if (!fairSettings?.templateId) {
+      throw new BadRequestException(
+        'A feira não possui um contrato principal configurado (FairContractSettings).',
+      );
+    }
 
-  if (fairSettings.templateId !== params.templateId) {
-    throw new BadRequestException(
-      'O template informado não é o contrato principal configurado para esta feira.',
-    );
-  }
+    if (fairSettings.templateId !== params.templateId) {
+      throw new BadRequestException(
+        'O template informado não é o contrato principal configurado para esta feira.',
+      );
+    }
 
-  const contract = await this.prisma.$transaction(async (tx) => {
-    if (params.contractId) {
-      const found = await tx.contract.findUnique({
-        where: { id: params.contractId },
+    const contract = await this.prisma.$transaction(async (tx) => {
+      if (params.contractId) {
+        const found = await tx.contract.findUnique({
+          where: { id: params.contractId },
+          select: {
+            id: true,
+            ownerFairId: true,
+            templateId: true,
+            signUrl: true,
+            assinafyDocumentId: true,
+          },
+        });
+
+        if (!found) {
+          throw new NotFoundException('Contrato (Contract.id) não encontrado.');
+        }
+
+        if (found.ownerFairId !== ownerFair.id) {
+          throw new BadRequestException(
+            'Este contrato não pertence ao expositor/feira informados (ownerFairId divergente).',
+          );
+        }
+
+        // ✅ recomendado: não trocar template silenciosamente
+        if (found.templateId !== params.templateId) {
+          throw new BadRequestException(
+            'O contrato existente está vinculado a outro template. ' +
+              'Isso indica mudança de contrato principal da feira. ' +
+              'Crie/recrie o contrato (reset do fluxo) antes de enviar um novo PDF.',
+          );
+        }
+
+        return found;
+      }
+
+      // fluxo novo: 1:1 por ownerFairId
+      const upserted = await tx.contract.upsert({
+        where: { ownerFairId: ownerFair.id },
+        create: {
+          ownerFairId: ownerFair.id,
+          templateId: params.templateId,
+        },
+        update: {}, // ✅ não força mudar templateId aqui
         select: {
           id: true,
           ownerFairId: true,
@@ -146,100 +191,63 @@ async uploadContractPdf(params: {
         },
       });
 
-      if (!found) {
-        throw new NotFoundException('Contrato (Contract.id) não encontrado.');
-      }
-
-      if (found.ownerFairId !== ownerFair.id) {
+      // se já existia e templateId diferente, falha (mesma regra)
+      if (upserted.templateId !== params.templateId) {
         throw new BadRequestException(
-          'Este contrato não pertence ao expositor/feira informados (ownerFairId divergente).',
+          'Já existe um contrato para este expositor nesta feira, mas com outro template. ' +
+            'Isso indica mudança de contrato principal. Recrie/reset o contrato antes de enviar novo PDF.',
         );
       }
 
-      // ✅ recomendado: não trocar template silenciosamente
-      if (found.templateId !== params.templateId) {
-        throw new BadRequestException(
-          'O contrato existente está vinculado a outro template. ' +
-            'Isso indica mudança de contrato principal da feira. ' +
-            'Crie/recrie o contrato (reset do fluxo) antes de enviar um novo PDF.',
-        );
-      }
-
-      return found;
-    }
-
-    // fluxo novo: 1:1 por ownerFairId
-    const upserted = await tx.contract.upsert({
-      where: { ownerFairId: ownerFair.id },
-      create: {
-        ownerFairId: ownerFair.id,
-        templateId: params.templateId,
-      },
-      update: {}, // ✅ não força mudar templateId aqui
-      select: {
-        id: true,
-        ownerFairId: true,
-        templateId: true,
-        signUrl: true,
-        assinafyDocumentId: true,
-      },
+      return upserted;
     });
 
-    // se já existia e templateId diferente, falha (mesma regra)
-    if (upserted.templateId !== params.templateId) {
-      throw new BadRequestException(
-        'Já existe um contrato para este expositor nesta feira, mas com outro template. ' +
-          'Isso indica mudança de contrato principal. Recrie/reset o contrato antes de enviar novo PDF.',
+    if (contract.signUrl || contract.assinafyDocumentId) {
+      throw new ConflictException(
+        'Este contrato já possui link de assinatura gerado. ' +
+          'Para evitar inconsistência, não é permitido reenviar/gerar outro PDF. ' +
+          'Se precisar atualizar o contrato, primeiro cancele/reset o fluxo de assinatura.',
       );
     }
 
-    return upserted;
-  });
-
-  if (contract.signUrl || contract.assinafyDocumentId) {
-    throw new ConflictException(
-      'Este contrato já possui link de assinatura gerado. ' +
-        'Para evitar inconsistência, não é permitido reenviar/gerar outro PDF. ' +
-        'Se precisar atualizar o contrato, primeiro cancele/reset o fluxo de assinatura.',
-    );
-  }
-
-  const pdfPath = this.buildContractPdfPath({
-    fairId: params.fairId,
-    ownerDocument,
-    contractId: contract.id,
-    createdAt: new Date(),
-  });
-
-  const { error } = await this.supabase.storage
-    .from(this.bucketName)
-    .upload(pdfPath, params.fileBuffer, {
-      contentType: 'application/pdf',
-      cacheControl: '0',
-      upsert: false,
+    const pdfPath = this.buildContractPdfPath({
+      fairId: params.fairId,
+      ownerDocument,
+      contractId: contract.id,
+      createdAt: new Date(),
     });
 
-  if (error) {
-    throw new InternalServerErrorException(
-      `Erro ao enviar PDF do contrato: ${error.message}`,
-    );
+    const { error } = await this.supabase.storage
+      .from(this.bucketName)
+      .upload(pdfPath, params.fileBuffer, {
+        contentType: 'application/pdf',
+        cacheControl: '0',
+        upsert: false,
+      });
+
+    if (error) {
+      throw new InternalServerErrorException(
+        `Erro ao enviar PDF do contrato: ${error.message}`,
+      );
+    }
+
+    await this.prisma.contract.update({
+      where: { id: contract.id },
+      data: { pdfPath },
+    });
+
+    const { data: signed, error: signedError } = await this.supabase.storage
+      .from(this.bucketName)
+      .createSignedUrl(pdfPath, 60 * 10);
+
+    if (signedError) {
+      return { contractId: contract.id, pdfPath };
+    }
+
+    return {
+      contractId: contract.id,
+      pdfPath,
+      signedUrl: signed?.signedUrl,
+    } as any;
   }
-
-  await this.prisma.contract.update({
-    where: { id: contract.id },
-    data: { pdfPath },
-  });
-
-  const { data: signed, error: signedError } = await this.supabase.storage
-    .from(this.bucketName)
-    .createSignedUrl(pdfPath, 60 * 10);
-
-  if (signedError) {
-    return { contractId: contract.id, pdfPath };
-  }
-
-  return { contractId: contract.id, pdfPath, signedUrl: signed?.signedUrl } as any;
-}
-
-
 }

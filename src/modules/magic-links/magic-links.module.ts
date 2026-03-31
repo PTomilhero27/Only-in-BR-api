@@ -7,6 +7,6 @@ import { PrismaModule } from '../../prisma/prisma.module';
 @Module({
   imports: [PrismaModule, JwtModule.register({})],
   controllers: [MagicLinksController],
-  providers: [MagicLinksService]
+  providers: [MagicLinksService],
 })
 export class MagicLinksModule {}

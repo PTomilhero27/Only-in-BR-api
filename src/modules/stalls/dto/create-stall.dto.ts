@@ -1,6 +1,6 @@
 // src/modules/stalls/dto/create-stall.dto.ts
-import { ApiProperty } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
+import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -12,8 +12,8 @@ import {
   Max,
   Min,
   ValidateNested,
-} from 'class-validator'
-import { StallSize, StallType } from '@prisma/client'
+} from 'class-validator';
+import { StallSize, StallType } from '@prisma/client';
 
 /**
  * DTO interno do bloco "PowerNeed" da barraca.
@@ -22,24 +22,24 @@ class StallPowerDto {
   @ApiProperty({ example: 2, description: 'Qtd tomadas 110V.' })
   @IsInt({ message: 'outlets110 deve ser inteiro' })
   @Min(0, { message: 'outlets110 deve ser >= 0' })
-  outlets110!: number
+  outlets110!: number;
 
   @ApiProperty({ example: 1, description: 'Qtd tomadas 220V.' })
   @IsInt({ message: 'outlets220 deve ser inteiro' })
   @Min(0, { message: 'outlets220 deve ser >= 0' })
-  outlets220!: number
+  outlets220!: number;
 
   @ApiProperty({ example: 0, description: 'Qtd tomadas “outras”/extensões.' })
   @IsInt({ message: 'outletsOther deve ser inteiro' })
   @Min(0, { message: 'outletsOther deve ser >= 0' })
-  outletsOther!: number
+  outletsOther!: number;
 
   @ApiProperty({
     example: true,
     description: 'Se precisa de gás nos equipamentos.',
   })
   @IsBoolean({ message: 'needsGas deve ser boolean' })
-  needsGas!: boolean
+  needsGas!: boolean;
 
   @ApiProperty({
     example: 'Uso de botijão P13 (1 unidade)',
@@ -49,7 +49,7 @@ class StallPowerDto {
   })
   @IsOptional()
   @IsString({ message: 'gasNotes deve ser string' })
-  gasNotes?: string | null
+  gasNotes?: string | null;
 
   @ApiProperty({
     example: 'Preferência por ponto próximo ao quadro.',
@@ -59,27 +59,27 @@ class StallPowerDto {
   })
   @IsOptional()
   @IsString({ message: 'notes deve ser string' })
-  notes?: string | null
+  notes?: string | null;
 }
 
 class StallEquipmentDto {
   @ApiProperty({ example: 'Chapa', description: 'Nome do equipamento.' })
   @IsString({ message: 'name deve ser string' })
   @IsNotEmpty({ message: 'name é obrigatório' })
-  name!: string
+  name!: string;
 
   @ApiProperty({ example: 1, description: 'Quantidade do equipamento.' })
   @IsInt({ message: 'qty deve ser inteiro' })
   @Min(1, { message: 'qty deve ser >= 1' })
   @Max(99, { message: 'qty deve ser <= 99' })
-  qty!: number
+  qty!: number;
 }
 
 class StallMenuProductDto {
   @ApiProperty({ example: 'Pastel de carne', description: 'Nome do produto.' })
   @IsString({ message: 'name deve ser string' })
   @IsNotEmpty({ message: 'name é obrigatório' })
-  name!: string
+  name!: string;
 
   @ApiProperty({
     example: 1500,
@@ -87,7 +87,7 @@ class StallMenuProductDto {
   })
   @IsInt({ message: 'priceCents deve ser inteiro' })
   @Min(0, { message: 'priceCents deve ser >= 0' })
-  priceCents!: number
+  priceCents!: number;
 
   @ApiProperty({
     example: 0,
@@ -97,14 +97,14 @@ class StallMenuProductDto {
   @IsOptional()
   @IsInt({ message: 'order deve ser inteiro' })
   @Min(0, { message: 'order deve ser >= 0' })
-  order?: number
+  order?: number;
 }
 
 class StallMenuCategoryDto {
   @ApiProperty({ example: 'Salgados', description: 'Nome da categoria.' })
   @IsString({ message: 'name deve ser string' })
   @IsNotEmpty({ message: 'name é obrigatório' })
-  name!: string
+  name!: string;
 
   @ApiProperty({
     example: 0,
@@ -114,7 +114,7 @@ class StallMenuCategoryDto {
   @IsOptional()
   @IsInt({ message: 'order deve ser inteiro' })
   @Min(0, { message: 'order deve ser >= 0' })
-  order?: number
+  order?: number;
 
   @ApiProperty({
     type: [StallMenuProductDto],
@@ -127,7 +127,7 @@ class StallMenuCategoryDto {
   @IsArray({ message: 'products deve ser um array' })
   @ValidateNested({ each: true })
   @Type(() => StallMenuProductDto)
-  products!: StallMenuProductDto[]
+  products!: StallMenuProductDto[];
 }
 
 /**
@@ -137,7 +137,7 @@ class StallPayloadDto {
   @ApiProperty({ example: 'Pastel do Zé', description: 'Nome do PDV.' })
   @IsString({ message: 'pdvName deve ser string' })
   @IsNotEmpty({ message: 'pdvName é obrigatório' })
-  pdvName!: string
+  pdvName!: string;
 
   @ApiProperty({
     example: 2,
@@ -146,7 +146,7 @@ class StallPayloadDto {
   @IsInt({ message: 'machinesQty deve ser inteiro' })
   @Min(0, { message: 'machinesQty deve ser >= 0' })
   @Max(99, { message: 'machinesQty deve ser <= 99' })
-  machinesQty!: number
+  machinesQty!: number;
 
   @ApiProperty({
     example: 'Pastel do Zé',
@@ -156,7 +156,7 @@ class StallPayloadDto {
   })
   @IsOptional()
   @IsString({ message: 'bannerName deve ser string' })
-  bannerName?: string | null
+  bannerName?: string | null;
 
   @ApiProperty({
     example: 'Salgados',
@@ -166,7 +166,7 @@ class StallPayloadDto {
   })
   @IsOptional()
   @IsString({ message: 'mainCategory deve ser string' })
-  mainCategory?: string | null
+  mainCategory?: string | null;
 
   @ApiProperty({
     enum: StallType,
@@ -174,7 +174,7 @@ class StallPayloadDto {
     description: 'Tipo: BARRACA/TRAILER etc.',
   })
   @IsEnum(StallType, { message: 'stallType inválido' })
-  stallType!: StallType
+  stallType!: StallType;
 
   @ApiProperty({
     enum: StallSize,
@@ -183,18 +183,21 @@ class StallPayloadDto {
       'Tamanho. Regra de negócio: se stallType=TRAILER, o backend força stallSize=TRAILER.',
   })
   @IsEnum(StallSize, { message: 'stallSize inválido' })
-  stallSize!: StallSize
+  stallSize!: StallSize;
 
   @ApiProperty({ example: 4, description: 'Qtd pessoas na equipe.' })
   @IsInt({ message: 'teamQty deve ser inteiro' })
   @Min(1, { message: 'teamQty deve ser >= 1' })
   @Max(99, { message: 'teamQty deve ser <= 99' })
-  teamQty!: number
+  teamQty!: number;
 
-  @ApiProperty({ type: StallPowerDto, description: 'Necessidades de energia/gás.' })
+  @ApiProperty({
+    type: StallPowerDto,
+    description: 'Necessidades de energia/gás.',
+  })
   @ValidateNested()
   @Type(() => StallPowerDto)
-  power!: StallPowerDto
+  power!: StallPowerDto;
 
   @ApiProperty({
     type: [StallEquipmentDto],
@@ -206,7 +209,7 @@ class StallPayloadDto {
   @IsArray({ message: 'equipments deve ser um array' })
   @ValidateNested({ each: true })
   @Type(() => StallEquipmentDto)
-  equipments?: StallEquipmentDto[]
+  equipments?: StallEquipmentDto[];
 
   @ApiProperty({
     type: [StallMenuCategoryDto],
@@ -224,7 +227,7 @@ class StallPayloadDto {
   @IsArray({ message: 'categories deve ser um array' })
   @ValidateNested({ each: true })
   @Type(() => StallMenuCategoryDto)
-  categories?: StallMenuCategoryDto[]
+  categories?: StallMenuCategoryDto[];
 }
 
 /**
@@ -243,5 +246,5 @@ export class CreateStallDto {
   })
   @ValidateNested()
   @Type(() => StallPayloadDto)
-  stall!: StallPayloadDto
+  stall!: StallPayloadDto;
 }

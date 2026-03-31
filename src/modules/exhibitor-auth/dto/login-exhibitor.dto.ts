@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { IsEmail, IsString, MinLength } from 'class-validator'
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 
 /**
  * DTO de login do expositor.
@@ -17,7 +17,7 @@ export class LoginExhibitorDto {
     description: 'E-mail usado como login do expositor.',
   })
   @IsEmail({}, { message: 'Informe um e-mail válido.' })
-  email: string
+  email: string;
 
   @ApiProperty({
     example: 'MinhaSenha@123',
@@ -25,5 +25,5 @@ export class LoginExhibitorDto {
   })
   @IsString({ message: 'password deve ser string.' })
   @MinLength(8, { message: 'A senha deve ter no mínimo 8 caracteres.' })
-  password: string
+  password: string;
 }

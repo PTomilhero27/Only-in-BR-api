@@ -2,7 +2,14 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 /**
  * DTO de query params para listagem de interessados (painel admin).
@@ -31,9 +38,15 @@ export class ListInterestsDto {
   /**
    * Página (1-based).
    */
-  @ApiPropertyOptional({ description: 'Página (1-based).', default: 1, example: 1 })
+  @ApiPropertyOptional({
+    description: 'Página (1-based).',
+    default: 1,
+    example: 1,
+  })
   @IsOptional()
-  @Transform(({ value }) => (value === '' || value === undefined ? undefined : Number(value)))
+  @Transform(({ value }) =>
+    value === '' || value === undefined ? undefined : Number(value),
+  )
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -42,9 +55,15 @@ export class ListInterestsDto {
   /**
    * Tamanho da página.
    */
-  @ApiPropertyOptional({ description: 'Itens por página.', default: 20, example: 20 })
+  @ApiPropertyOptional({
+    description: 'Itens por página.',
+    default: 20,
+    example: 20,
+  })
   @IsOptional()
-  @Transform(({ value }) => (value === '' || value === undefined ? undefined : Number(value)))
+  @Transform(({ value }) =>
+    value === '' || value === undefined ? undefined : Number(value),
+  )
   @Type(() => Number)
   @IsInt()
   @Min(1)

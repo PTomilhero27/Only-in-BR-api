@@ -14,24 +14,24 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../user/user.module';
 
 @Module({
-    imports: [
-        UsersModule,
-        JwtModule.registerAsync({
-            inject: [ConfigService],
-            useFactory: (config: ConfigService) => {
-                const secret = config.get<string>('JWT_SECRET'); 
-                if (!secret) throw new Error('JWT_SECRET não definido no .env');
+  imports: [
+    UsersModule,
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        if (!secret) throw new Error('JWT_SECRET não definido no .env');
 
-                const expiresIn = (config.get<string>('JWT_EXPIRES_IN') ?? '1d') as any;
+        const expiresIn = (config.get<string>('JWT_EXPIRES_IN') ?? '1d') as any;
 
-                return {
-                    secret,
-                    signOptions: { expiresIn },
-                };
-            },
-        }),
-    ],
-    controllers: [AuthController],
-    providers: [AuthService, JwtStrategy],
+        return {
+          secret,
+          signOptions: { expiresIn },
+        };
+      },
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy],
 })
-export class AuthModule { }
+export class AuthModule {}

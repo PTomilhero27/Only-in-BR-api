@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBooleanString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsBooleanString,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 /**
  * ListUsersDto
@@ -20,7 +27,8 @@ export class ListUsersDto {
 
   @ApiPropertyOptional({
     example: 'true',
-    description: 'Se informado, filtra por ativo/inativo (string "true"/"false").',
+    description:
+      'Se informado, filtra por ativo/inativo (string "true"/"false").',
   })
   @IsOptional()
   @IsBooleanString({ message: 'isActive deve ser "true" ou "false".' })

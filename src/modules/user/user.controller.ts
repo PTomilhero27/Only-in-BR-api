@@ -66,7 +66,11 @@ export class UsersController {
    * Edita usuário do painel.
    */
   @Patch(':id')
-  update(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdateUserDto) {
+  update(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+  ) {
     this.assertAdmin(user);
     if (!id) throw new BadRequestException('id obrigatório.');
     return this.users.updateNonExhibitor(id, dto, user.id);

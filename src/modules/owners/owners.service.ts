@@ -10,7 +10,11 @@
  * - O contrato do portal usa nomes “amigáveis” (name, zipCode, etc.),
  *   e este service faz o mapeamento para o schema real do Prisma.
  */
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PersonType } from '@prisma/client';
 
@@ -70,7 +74,10 @@ export class OwnersService {
    * - Ignoramos qualquer tentativa de alterar personType/document/email (não estão no DTO).
    * - Validamos consistência PF/PJ com o documento armazenado (defesa extra).
    */
-  async updateMe(user: JwtPayload, dto: UpdateOwnerMeDto): Promise<OwnerMeResponseDto> {
+  async updateMe(
+    user: JwtPayload,
+    dto: UpdateOwnerMeDto,
+  ): Promise<OwnerMeResponseDto> {
     const ownerId = await this.requireOwnerId(user.id);
 
     const existing = await this.prisma.owner.findUnique({
@@ -85,7 +92,10 @@ export class OwnersService {
     if (!existing) throw new NotFoundException('Owner não encontrado.');
 
     // Coerência PF/PJ com o documento armazenado (fonte de verdade).
-    this.assertPersonTypeMatchesDocument(existing.personType, existing.document);
+    this.assertPersonTypeMatchesDocument(
+      existing.personType,
+      existing.document,
+    );
 
     const updated = await this.prisma.owner.update({
       where: { id: ownerId },
@@ -162,7 +172,9 @@ export class OwnersService {
     }
 
     if (!user.ownerId) {
-      throw new BadRequestException('Este usuário não está vinculado a um expositor (ownerId).');
+      throw new BadRequestException(
+        'Este usuário não está vinculado a um expositor (ownerId).',
+      );
     }
 
     return user.ownerId;
@@ -213,15 +225,22 @@ export class OwnersService {
    * - PF => 11 dígitos
    * - PJ => 14 dígitos
    */
-  private assertPersonTypeMatchesDocument(personType: PersonType, document: string): void {
+  private assertPersonTypeMatchesDocument(
+    personType: PersonType,
+    document: string,
+  ): void {
     const len = document.length;
 
     if (personType === PersonType.PF && len !== 11) {
-      throw new BadRequestException('personType=PF requer document com 11 dígitos (CPF).');
+      throw new BadRequestException(
+        'personType=PF requer document com 11 dígitos (CPF).',
+      );
     }
 
     if (personType === PersonType.PJ && len !== 14) {
-      throw new BadRequestException('personType=PJ requer document com 14 dígitos (CNPJ).');
+      throw new BadRequestException(
+        'personType=PJ requer document com 14 dígitos (CNPJ).',
+      );
     }
   }
 }

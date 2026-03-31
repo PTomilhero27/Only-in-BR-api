@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -8,10 +8,10 @@ import {
   IsOptional,
   Min,
   ValidateNested,
-} from 'class-validator'
-import { Type } from 'class-transformer'
-import { StallSize } from '@prisma/client'
-import { OwnerFairPurchaseInstallmentDto } from './owner-fair-purchase-installment.dto'
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { StallSize } from '@prisma/client';
+import { OwnerFairPurchaseInstallmentDto } from './owner-fair-purchase-installment.dto';
 
 /**
  * ✅ OwnerFairPurchaseLineDto
@@ -27,7 +27,7 @@ export class OwnerFairPurchaseLineDto {
     example: 'SIZE_3X3',
   })
   @IsEnum(StallSize)
-  stallSize!: StallSize
+  stallSize!: StallSize;
 
   @ApiProperty({
     description: 'Preço unitário da barraca (em centavos).',
@@ -35,7 +35,7 @@ export class OwnerFairPurchaseLineDto {
   })
   @IsInt()
   @Min(0)
-  unitPriceCents!: number
+  unitPriceCents!: number;
 
   @ApiPropertyOptional({
     description: 'Valor pago no ato (entrada), em centavos.',
@@ -45,7 +45,7 @@ export class OwnerFairPurchaseLineDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  paidCents?: number
+  paidCents?: number;
 
   @ApiPropertyOptional({
     description:
@@ -56,7 +56,7 @@ export class OwnerFairPurchaseLineDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  installmentsCount?: number
+  installmentsCount?: number;
 
   @ApiPropertyOptional({
     description:
@@ -72,5 +72,5 @@ export class OwnerFairPurchaseLineDto {
   @ArrayMaxSize(12)
   @ValidateNested({ each: true })
   @Type(() => OwnerFairPurchaseInstallmentDto)
-  installments?: OwnerFairPurchaseInstallmentDto[]
+  installments?: OwnerFairPurchaseInstallmentDto[];
 }

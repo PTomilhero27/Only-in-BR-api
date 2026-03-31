@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 /**
  * DTO de parcela de uma compra (OwnerFairPurchaseInstallment).
@@ -15,14 +15,14 @@ export class OwnerFairInstallmentDto {
   })
   @IsInt()
   @Min(1)
-  number: number
+  number: number;
 
   @ApiProperty({
     example: '2026-02-03',
     description: 'Data de vencimento (YYYY-MM-DD).',
   })
   @IsString()
-  dueDate: string
+  dueDate: string;
 
   @ApiProperty({
     example: 100000,
@@ -30,7 +30,7 @@ export class OwnerFairInstallmentDto {
   })
   @IsInt()
   @Min(0)
-  amountCents: number
+  amountCents: number;
 
   @ApiPropertyOptional({
     example: '2026-02-03',
@@ -38,7 +38,7 @@ export class OwnerFairInstallmentDto {
   })
   @IsOptional()
   @IsString()
-  paidAt?: string | null
+  paidAt?: string | null;
 
   @ApiPropertyOptional({
     example: 100000,
@@ -48,5 +48,5 @@ export class OwnerFairInstallmentDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  paidAmountCents?: number | null
+  paidAmountCents?: number | null;
 }

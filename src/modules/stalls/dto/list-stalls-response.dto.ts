@@ -1,9 +1,9 @@
 // src/modules/stalls/dto/list-stalls-response.dto.ts
-import { ApiProperty } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
-import { IsArray, ValidateNested } from 'class-validator'
-import { StallListItemDto } from './stall-list-item.dto'
-import { PaginationMetaDto } from './pagination-meta.dto'
+import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsArray, ValidateNested } from 'class-validator';
+import { StallListItemDto } from './stall-list-item.dto';
+import { PaginationMetaDto } from './pagination-meta.dto';
 
 /**
  * DTO de resposta paginada para listagem de barracas.
@@ -16,7 +16,7 @@ export class ListStallsResponseDto {
   @IsArray({ message: 'items deve ser um array' })
   @ValidateNested({ each: true })
   @Type(() => StallListItemDto)
-  items!: StallListItemDto[]
+  items!: StallListItemDto[];
 
   @ApiProperty({
     type: PaginationMetaDto,
@@ -24,5 +24,5 @@ export class ListStallsResponseDto {
   })
   @ValidateNested()
   @Type(() => PaginationMetaDto)
-  meta!: PaginationMetaDto
+  meta!: PaginationMetaDto;
 }

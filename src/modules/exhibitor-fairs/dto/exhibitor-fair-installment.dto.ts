@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsDateString, IsInt, IsOptional, Min } from 'class-validator'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateString, IsInt, IsOptional, Min } from 'class-validator';
 
 /**
  * DTO de parcela do plano de pagamento do expositor na feira.
@@ -16,19 +16,22 @@ export class ExhibitorFairInstallmentDto {
   @ApiProperty({ description: 'Número da parcela (1..N).', example: 1 })
   @IsInt()
   @Min(1)
-  number: number
+  number: number;
 
   @ApiProperty({
     description: 'Data de vencimento prevista (ISO).',
     example: '2026-02-10T00:00:00.000Z',
   })
   @IsDateString()
-  dueDate: string
+  dueDate: string;
 
-  @ApiProperty({ description: 'Valor previsto da parcela (em centavos).', example: 15000 })
+  @ApiProperty({
+    description: 'Valor previsto da parcela (em centavos).',
+    example: 15000,
+  })
   @IsInt()
   @Min(0)
-  amountCents: number
+  amountCents: number;
 
   @ApiPropertyOptional({
     description: 'Quando foi pago (ISO). null => não pago.',
@@ -36,7 +39,7 @@ export class ExhibitorFairInstallmentDto {
   })
   @IsOptional()
   @IsDateString()
-  paidAt?: string | null
+  paidAt?: string | null;
 
   @ApiPropertyOptional({
     description:
@@ -46,5 +49,5 @@ export class ExhibitorFairInstallmentDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  paidAmountCents?: number | null
+  paidAmountCents?: number | null;
 }

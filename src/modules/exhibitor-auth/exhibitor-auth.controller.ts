@@ -1,14 +1,14 @@
-import { Body, Controller, Post } from '@nestjs/common'
-import { ApiOperation, ApiTags, ApiOkResponse } from '@nestjs/swagger'
+import { Body, Controller, Post } from '@nestjs/common';
+import { ApiOperation, ApiTags, ApiOkResponse } from '@nestjs/swagger';
 
-import { Public } from '../../common/decorators/public.decorator'
-import { ExhibitorAuthService } from './exhibitor-auth.service'
-import { ValidateTokenDto } from './dto/validate-token.dto'
-import { ValidateTokenResponseDto } from './dto/validate-token-response.dto'
-import { SetPasswordDto } from './dto/set-password.dto'
-import { SetPasswordResponseDto } from './dto/set-password-response.dto'
-import { LoginExhibitorDto } from './dto/login-exhibitor.dto'
-import { LoginExhibitorResponseDto } from './dto/login-exhibitor-response.dto'
+import { Public } from '../../common/decorators/public.decorator';
+import { ExhibitorAuthService } from './exhibitor-auth.service';
+import { ValidateTokenDto } from './dto/validate-token.dto';
+import { ValidateTokenResponseDto } from './dto/validate-token-response.dto';
+import { SetPasswordDto } from './dto/set-password.dto';
+import { SetPasswordResponseDto } from './dto/set-password-response.dto';
+import { LoginExhibitorDto } from './dto/login-exhibitor.dto';
+import { LoginExhibitorResponseDto } from './dto/login-exhibitor-response.dto';
 
 /**
  * Controller público para autenticação do expositor.
@@ -30,8 +30,10 @@ export class ExhibitorAuthController {
   @Post('validate-token')
   @ApiOperation({ summary: 'Validar token de ativação ou reset de senha' })
   @ApiOkResponse({ type: ValidateTokenResponseDto })
-  validateToken(@Body() dto: ValidateTokenDto): Promise<ValidateTokenResponseDto> {
-    return this.service.validateToken(dto)
+  validateToken(
+    @Body() dto: ValidateTokenDto,
+  ): Promise<ValidateTokenResponseDto> {
+    return this.service.validateToken(dto);
   }
 
   @Public()
@@ -39,7 +41,7 @@ export class ExhibitorAuthController {
   @ApiOperation({ summary: 'Definir senha usando token (ativação ou reset)' })
   @ApiOkResponse({ type: SetPasswordResponseDto })
   setPassword(@Body() dto: SetPasswordDto): Promise<SetPasswordResponseDto> {
-    return this.service.setPassword(dto)
+    return this.service.setPassword(dto);
   }
 
   @Public()
@@ -47,6 +49,6 @@ export class ExhibitorAuthController {
   @ApiOperation({ summary: 'Login do expositor (email + senha)' })
   @ApiOkResponse({ type: LoginExhibitorResponseDto })
   login(@Body() dto: LoginExhibitorDto): Promise<LoginExhibitorResponseDto> {
-    return this.service.login(dto)
+    return this.service.login(dto);
   }
 }

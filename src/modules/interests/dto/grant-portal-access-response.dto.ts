@@ -17,7 +17,10 @@ export class GrantPortalAccessResponseDto {
   @ApiProperty({ example: 'c0a8012a-...' })
   userId: string;
 
-  @ApiProperty({ enum: PasswordTokenType, example: PasswordTokenType.ACTIVATE_ACCOUNT })
+  @ApiProperty({
+    enum: PasswordTokenType,
+    example: PasswordTokenType.ACTIVATE_ACCOUNT,
+  })
   tokenType: PasswordTokenType;
 
   @ApiProperty({ example: '2026-01-28T23:30:00.000Z' })

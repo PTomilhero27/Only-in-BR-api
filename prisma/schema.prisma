@@ -105,6 +105,29 @@ enum OwnerFairPaymentStatus {
   CANCELLED
 }
 
+enum MarketplaceSlotStatus {
+  AVAILABLE
+  RESERVED
+  CONFIRMED
+  BLOCKED
+}
+
+enum MarketplaceInterestStatus {
+  NEW
+  CONTACTED
+  NEGOTIATING
+  CONVERTED
+  DISMISSED
+  EXPIRED
+}
+
+enum MarketplaceReservationStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  CONVERTED
+}
+
 // =====================
 // EXCEL TEMPLATES (MVP)
 // =====================
@@ -317,6 +340,10 @@ model Fair {
   fairMap    FairMap?
   magicLinks FairMagicLink[]
 
+  fairMapSlots            FairMapSlot[]
+  marketplaceInterests    MarketplaceSlotInterest[]
+  marketplaceReservations MarketplaceSlotReservation[]
+
   @@index([createdByUserId])
 }
 
@@ -419,6 +446,9 @@ model Owner {
    * ✅ Quantidade de feiras que o expositor participou (com barraca vinculada).
    */
   fairsParticipatedCount Int @default(0)
+
+  marketplaceInterests    MarketplaceSlotInterest[]
+  marketplaceReservations MarketplaceSlotReservation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1274,6 +1304,7 @@ model FairMap {
   updatedAt DateTime @updatedAt
 
   links FairMapBoothLink[]
+  slots FairMapSlot[]
 }
 
 model FairMapBoothLink {
@@ -1334,4 +1365,72 @@ model FairMagicLink {
 
   @@index([fairId])
   @@index([isActive])
+}
+
+// =====================
+// MARKETPLACE DE SLOTS
+// =====================
+
+model FairMapSlot {
+  id               String                @id @default(cuid())
+  fairId           String
+  fair             Fair                  @relation(fields: [fairId], references: [id], onDelete: Cascade)
+  fairMapId        String
+  fairMap          FairMap               @relation(fields: [fairMapId], references: [id], onDelete: Cascade)
+  fairMapElementId String // Vínculo com MapTemplateElement.clientKey ou id
+  code             String?
+  label            String?
+  isPublic         Boolean               @default(true)
+  priceCents       Int                   @default(0)
+  notes            String?
+  commercialStatus MarketplaceSlotStatus @default(AVAILABLE)
+
+  interests    MarketplaceSlotInterest[]
+  reservations MarketplaceSlotReservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fairMapId, fairMapElementId])
+  @@index([fairId])
+  @@index([commercialStatus])
+}
+
+model MarketplaceSlotInterest {
+  id            String                    @id @default(cuid())
+  fairId        String
+  fair          Fair                      @relation(fields: [fairId], references: [id], onDelete: Cascade)
+  fairMapSlotId String
+  fairMapSlot   FairMapSlot               @relation(fields: [fairMapSlotId], references: [id], onDelete: Cascade)
+  ownerId       String
+  owner         Owner                     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  message       String?
+  status        MarketplaceInterestStatus @default(NEW)
+  expiresAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fairMapSlotId])
+  @@index([ownerId])
+  @@index([status])
+}
+
+model MarketplaceSlotReservation {
+  id            String                       @id @default(cuid())
+  fairId        String
+  fair          Fair                         @relation(fields: [fairId], references: [id], onDelete: Cascade)
+  fairMapSlotId String
+  fairMapSlot   FairMapSlot                  @relation(fields: [fairMapSlotId], references: [id], onDelete: Cascade)
+  ownerId       String
+  owner         Owner                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  status        MarketplaceReservationStatus @default(ACTIVE)
+  expiresAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fairMapSlotId])
+  @@index([ownerId])
+  @@index([status])
 }

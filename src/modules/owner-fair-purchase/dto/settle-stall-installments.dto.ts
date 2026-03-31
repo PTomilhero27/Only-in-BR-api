@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
   IsArray,
@@ -10,7 +10,7 @@ import {
   Matches,
   Min,
   ValidateIf,
-} from 'class-validator'
+} from 'class-validator';
 
 export enum SettleInstallmentsAction {
   SET_PAID = 'SET_PAID',
@@ -29,10 +29,11 @@ export enum SettleInstallmentsAction {
 export class SettleStallInstallmentsDto {
   @ApiProperty({
     example: 'cm166ncpu0003rk906y96crjq',
-    description: 'ID da compra (OwnerFairPurchase) que terá as parcelas afetadas.',
+    description:
+      'ID da compra (OwnerFairPurchase) que terá as parcelas afetadas.',
   })
   @IsString()
-  purchaseId: string
+  purchaseId: string;
 
   @ApiProperty({
     enum: SettleInstallmentsAction,
@@ -40,7 +41,7 @@ export class SettleStallInstallmentsDto {
     description: 'Ação: marcar como paga (SET_PAID) ou desfazer (SET_UNPAID).',
   })
   @IsEnum(SettleInstallmentsAction)
-  action: SettleInstallmentsAction
+  action: SettleInstallmentsAction;
 
   @ApiPropertyOptional({
     example: true,
@@ -49,7 +50,7 @@ export class SettleStallInstallmentsDto {
   })
   @IsOptional()
   @IsBoolean()
-  payAll?: boolean
+  payAll?: boolean;
 
   @ApiPropertyOptional({
     example: [1],
@@ -63,7 +64,7 @@ export class SettleStallInstallmentsDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   @IsOptional()
-  numbers?: number[]
+  numbers?: number[];
 
   @ApiPropertyOptional({
     example: '2026-02-04',
@@ -75,7 +76,7 @@ export class SettleStallInstallmentsDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, {
     message: 'paidAt deve estar no formato YYYY-MM-DD.',
   })
-  paidAt?: string
+  paidAt?: string;
 
   @ApiPropertyOptional({
     example: 100000,
@@ -85,5 +86,5 @@ export class SettleStallInstallmentsDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  paidAmountCents?: number
+  paidAmountCents?: number;
 }

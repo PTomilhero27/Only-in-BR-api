@@ -11,7 +11,10 @@ export class OwnerFairStallInstallmentDto {
   @Min(1)
   number!: number;
 
-  @ApiProperty({ description: 'Data de vencimento (YYYY-MM-DD).', example: '2026-02-10' })
+  @ApiProperty({
+    description: 'Data de vencimento (YYYY-MM-DD).',
+    example: '2026-02-10',
+  })
   @IsString()
   @IsNotEmpty()
   dueDate!: string;

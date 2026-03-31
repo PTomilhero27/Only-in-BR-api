@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PersonType } from '@prisma/client';
 import { UpsertPublicInterestDto } from './dto/upsert-public-interest.dto';
@@ -30,7 +34,9 @@ export class PublicInterestsService {
       });
 
       if (exists) {
-        throw new BadRequestException('Já existe um cadastro com este CPF/CNPJ.');
+        throw new BadRequestException(
+          'Já existe um cadastro com este CPF/CNPJ.',
+        );
       }
 
       const owner = await this.prisma.owner.create({
@@ -47,7 +53,9 @@ export class PublicInterestsService {
       return { ownerId: owner.id };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
-      throw new InternalServerErrorException('Não foi possível salvar os dados no momento.');
+      throw new InternalServerErrorException(
+        'Não foi possível salvar os dados no momento.',
+      );
     }
   }
 
@@ -55,15 +63,22 @@ export class PublicInterestsService {
     return (value ?? '').replace(/\D/g, '');
   }
 
-  private assertPersonTypeMatchesDocument(personType: PersonType, document: string): void {
+  private assertPersonTypeMatchesDocument(
+    personType: PersonType,
+    document: string,
+  ): void {
     const len = document.length;
 
     if (personType === PersonType.PF && len !== 11) {
-      throw new BadRequestException('personType=PF requer document com 11 dígitos (CPF).');
+      throw new BadRequestException(
+        'personType=PF requer document com 11 dígitos (CPF).',
+      );
     }
 
     if (personType === PersonType.PJ && len !== 14) {
-      throw new BadRequestException('personType=PJ requer document com 14 dígitos (CNPJ).');
+      throw new BadRequestException(
+        'personType=PJ requer document com 14 dígitos (CNPJ).',
+      );
     }
   }
 }

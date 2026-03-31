@@ -51,13 +51,18 @@ export class OwnerMeResponseDto {
   })
   name: string | null;
 
-  @ApiPropertyOptional({ example: '11999999999', nullable: true, description: 'Somente dígitos.' })
+  @ApiPropertyOptional({
+    example: '11999999999',
+    nullable: true,
+    description: 'Somente dígitos.',
+  })
   phone: string | null;
 
   @ApiPropertyOptional({
     example: 'Barraca de batata + pastel; também vendo caldo de cana.',
     nullable: true,
-    description: 'Descrição livre das barracas/produtos para triagem e operação.',
+    description:
+      'Descrição livre das barracas/produtos para triagem e operação.',
   })
   stallsDescription: string | null;
 
@@ -65,23 +70,36 @@ export class OwnerMeResponseDto {
   // Endereço (editáveis)
   // -----------------------
 
-  @ApiPropertyOptional({ example: '01001000', nullable: true, description: 'CEP com 8 dígitos.' })
+  @ApiPropertyOptional({
+    example: '01001000',
+    nullable: true,
+    description: 'CEP com 8 dígitos.',
+  })
   zipCode: string | null;
 
   @ApiPropertyOptional({
     example: 'Rua João Antônio de Moraes - Jardim Sampaio',
     nullable: true,
-    description: 'Endereço “compacto” (rua + bairro etc.) conforme schema atual.',
+    description:
+      'Endereço “compacto” (rua + bairro etc.) conforme schema atual.',
   })
   addressFull: string | null;
 
-  @ApiPropertyOptional({ example: '100', nullable: true, description: 'Número do endereço.' })
+  @ApiPropertyOptional({
+    example: '100',
+    nullable: true,
+    description: 'Número do endereço.',
+  })
   addressNumber: string | null;
 
   @ApiPropertyOptional({ example: 'São Paulo', nullable: true })
   city: string | null;
 
-  @ApiPropertyOptional({ example: 'SP', nullable: true, description: 'UF com 2 letras.' })
+  @ApiPropertyOptional({
+    example: 'SP',
+    nullable: true,
+    description: 'UF com 2 letras.',
+  })
   state: string | null;
 
   // -----------------------
@@ -91,20 +109,36 @@ export class OwnerMeResponseDto {
   @ApiPropertyOptional({
     example: '11999999999',
     nullable: true,
-    description: 'Chave Pix (pode ser CPF/CNPJ, e-mail, telefone ou aleatória).',
+    description:
+      'Chave Pix (pode ser CPF/CNPJ, e-mail, telefone ou aleatória).',
   })
   pixKey: string | null;
 
-  @ApiPropertyOptional({ enum: BankAccountType, nullable: true, example: BankAccountType.CORRENTE })
+  @ApiPropertyOptional({
+    enum: BankAccountType,
+    nullable: true,
+    example: BankAccountType.CORRENTE,
+  })
   bankAccountType: BankAccountType | null;
 
-  @ApiPropertyOptional({ example: '260 - Nu Pagamentos (Nubank)', nullable: true })
+  @ApiPropertyOptional({
+    example: '260 - Nu Pagamentos (Nubank)',
+    nullable: true,
+  })
   bankName: string | null;
 
-  @ApiPropertyOptional({ example: '1234', nullable: true, description: 'Somente dígitos.' })
+  @ApiPropertyOptional({
+    example: '1234',
+    nullable: true,
+    description: 'Somente dígitos.',
+  })
   bankAgency: string | null;
 
-  @ApiPropertyOptional({ example: '987654', nullable: true, description: 'Somente dígitos.' })
+  @ApiPropertyOptional({
+    example: '987654',
+    nullable: true,
+    description: 'Somente dígitos.',
+  })
   bankAccount: string | null;
 
   @ApiPropertyOptional({ example: 'JOAO DA SILVA', nullable: true })

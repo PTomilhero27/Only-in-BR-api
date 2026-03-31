@@ -4,6 +4,6 @@ import { OwnersService } from './owners.service';
 
 @Module({
   controllers: [OwnersController],
-  providers: [OwnersService]
+  providers: [OwnersService],
 })
 export class OwnersModule {}

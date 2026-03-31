@@ -2,22 +2,22 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
-} from '@nestjs/common'
+} from '@nestjs/common';
 
-import { PrismaService } from 'src/prisma/prisma.service'
-import { ValidateTokenDto } from './dto/validate-token.dto'
+import { PrismaService } from 'src/prisma/prisma.service';
+import { ValidateTokenDto } from './dto/validate-token.dto';
 import {
   ValidateTokenFailureReason,
   ValidateTokenResponseDto,
-} from './dto/validate-token-response.dto'
-import { SetPasswordDto } from './dto/set-password.dto'
-import { SetPasswordResponseDto } from './dto/set-password-response.dto'
-import * as bcrypt from 'bcrypt'
-import { createHash } from 'crypto'
-import { JwtService } from '@nestjs/jwt'
-import { LoginExhibitorDto } from './dto/login-exhibitor.dto'
-import { LoginExhibitorResponseDto } from './dto/login-exhibitor-response.dto'
-import { UserRole } from '@prisma/client'
+} from './dto/validate-token-response.dto';
+import { SetPasswordDto } from './dto/set-password.dto';
+import { SetPasswordResponseDto } from './dto/set-password-response.dto';
+import * as bcrypt from 'bcrypt';
+import { createHash } from 'crypto';
+import { JwtService } from '@nestjs/jwt';
+import { LoginExhibitorDto } from './dto/login-exhibitor.dto';
+import { LoginExhibitorResponseDto } from './dto/login-exhibitor-response.dto';
+import { UserRole } from '@prisma/client';
 
 /**
  * Service de autenticação do expositor.
@@ -39,9 +39,11 @@ export class ExhibitorAuthService {
     private readonly jwt: JwtService,
   ) {}
 
-  async validateToken(dto: ValidateTokenDto): Promise<ValidateTokenResponseDto> {
-    const tokenHash = this.hashToken(dto.token)
-    const now = new Date()
+  async validateToken(
+    dto: ValidateTokenDto,
+  ): Promise<ValidateTokenResponseDto> {
+    const tokenHash = this.hashToken(dto.token);
+    const now = new Date();
 
     const token = await this.prisma.passwordResetToken.findFirst({
       where: { tokenHash },
@@ -52,22 +54,26 @@ export class ExhibitorAuthService {
           },
         },
       },
-    })
+    });
 
     if (!token) {
-      return { ok: false, reason: ValidateTokenFailureReason.INVALID }
+      return { ok: false, reason: ValidateTokenFailureReason.INVALID };
     }
 
     if (token.usedAt) {
-      return { ok: false, reason: ValidateTokenFailureReason.USED }
+      return { ok: false, reason: ValidateTokenFailureReason.USED };
     }
 
     if (token.expiresAt <= now) {
-      return { ok: false, reason: ValidateTokenFailureReason.EXPIRED }
+      return { ok: false, reason: ValidateTokenFailureReason.EXPIRED };
     }
 
-    if (!token.user || token.user.role !== UserRole.EXHIBITOR || !token.user.ownerId) {
-      return { ok: false, reason: ValidateTokenFailureReason.INVALID }
+    if (
+      !token.user ||
+      token.user.role !== UserRole.EXHIBITOR ||
+      !token.user.ownerId
+    ) {
+      return { ok: false, reason: ValidateTokenFailureReason.INVALID };
     }
 
     return {
@@ -77,11 +83,11 @@ export class ExhibitorAuthService {
       expiresAt: token.expiresAt.toISOString(),
       email: token.user.email,
       displayName: token.user.owner?.fullName ?? null,
-    }
+    };
   }
 
   async setPassword(dto: SetPasswordDto): Promise<SetPasswordResponseDto> {
-    const tokenHash = this.hashToken(dto.token)
+    const tokenHash = this.hashToken(dto.token);
 
     const token = await this.prisma.passwordResetToken.findFirst({
       where: {
@@ -90,13 +96,13 @@ export class ExhibitorAuthService {
         expiresAt: { gt: new Date() },
       },
       include: { user: true },
-    })
+    });
 
     if (!token || !token.user) {
-      throw new BadRequestException('Token inválido ou expirado.')
+      throw new BadRequestException('Token inválido ou expirado.');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10)
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     await this.prisma.$transaction([
       this.prisma.user.update({
@@ -111,9 +117,9 @@ export class ExhibitorAuthService {
         where: { id: token.id },
         data: { usedAt: new Date() },
       }),
-    ])
+    ]);
 
-    return { success: true }
+    return { success: true };
   }
 
   /**
@@ -128,7 +134,7 @@ export class ExhibitorAuthService {
    * - JWT + owner mínimo
    */
   async login(dto: LoginExhibitorDto): Promise<LoginExhibitorResponseDto> {
-    const email = dto.email.trim().toLowerCase()
+    const email = dto.email.trim().toLowerCase();
 
     const user = await this.prisma.user.findFirst({
       where: {
@@ -139,20 +145,22 @@ export class ExhibitorAuthService {
       include: {
         owner: true,
       },
-    })
+    });
 
     if (!user || !user.ownerId || !user.owner) {
-      throw new UnauthorizedException('Credenciais inválidas.')
+      throw new UnauthorizedException('Credenciais inválidas.');
     }
 
     // Primeiro acesso ainda não definiu senha
     if (!user.password) {
-      throw new UnauthorizedException('A conta ainda não foi ativada. Use o link de ativação.')
+      throw new UnauthorizedException(
+        'A conta ainda não foi ativada. Use o link de ativação.',
+      );
     }
 
-    const ok = await bcrypt.compare(dto.password, user.password)
+    const ok = await bcrypt.compare(dto.password, user.password);
     if (!ok) {
-      throw new UnauthorizedException('Credenciais inválidas.')
+      throw new UnauthorizedException('Credenciais inválidas.');
     }
 
     // ✅ JWT payload mínimo (evitar vazar dados)
@@ -160,9 +168,9 @@ export class ExhibitorAuthService {
       sub: user.id,
       role: user.role,
       ownerId: user.ownerId,
-    }
+    };
 
-    const accessToken = await this.jwt.signAsync(payload)
+    const accessToken = await this.jwt.signAsync(payload);
 
     return {
       accessToken,
@@ -173,7 +181,7 @@ export class ExhibitorAuthService {
         fullName: user.owner.fullName,
         email: user.owner.email,
       },
-    }
+    };
   }
 
   /**
@@ -181,6 +189,6 @@ export class ExhibitorAuthService {
    * Precisa ser idêntico ao usado na geração do token no admin.
    */
   private hashToken(raw: string): string {
-    return createHash('sha256').update(raw).digest('hex')
+    return createHash('sha256').update(raw).digest('hex');
   }
 }

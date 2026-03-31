@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 
@@ -39,9 +44,9 @@ export class MagicLinksService {
   async accessLink(linkId: string, accessCode: string) {
     const magicLink = await this.prisma.fairMagicLink.findUnique({
       where: { id: linkId },
-      include: { 
-        fair: { 
-          include: { 
+      include: {
+        fair: {
+          include: {
             occurrences: true,
             fairMap: {
               include: {
@@ -51,14 +56,17 @@ export class MagicLinksService {
                 links: {
                   include: {
                     stallFair: {
-                      include: { stall: true, ownerFair: { include: { owner: true } } }
-                    }
-                  }
-                }
-              }
-            } 
-          } 
-        } 
+                      include: {
+                        stall: true,
+                        ownerFair: { include: { owner: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -71,19 +79,23 @@ export class MagicLinksService {
     }
 
     if (!magicLink.fair.fairMap) {
-      throw new BadRequestException('Esta feira ainda não possui um mapa vinculado.');
+      throw new BadRequestException(
+        'Esta feira ainda não possui um mapa vinculado.',
+      );
     }
 
     const now = new Date();
-    
+
     // Verifica se a feira está ocorrendo com base nas ocorrências listadas
     const isHappeningNow = magicLink.fair.occurrences.some(
-      (occ) => now >= occ.startsAt && now <= occ.endsAt
+      (occ) => now >= occ.startsAt && now <= occ.endsAt,
     );
 
     // Permitindo acesso se a feira estiver ATIVA geral, e garantindo verificação das datas de ocorrência.
     if (magicLink.fair.status !== 'ATIVA' && !isHappeningNow) {
-       throw new BadRequestException('A feira não está ativa no momento para acessar o mapa.');
+      throw new BadRequestException(
+        'A feira não está ativa no momento para acessar o mapa.',
+      );
     }
 
     // Gera o Token JWT de Convidado

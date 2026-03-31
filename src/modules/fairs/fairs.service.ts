@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -611,7 +610,9 @@ export class FairsService {
       if (!before) throw new NotFoundException('Feira não encontrada.');
 
       if (before.status === FairStatus.FINALIZADA) {
-        throw new BadRequestException('Não é possível editar uma feira finalizada.');
+        throw new BadRequestException(
+          'Não é possível editar uma feira finalizada.',
+        );
       }
 
       const stallsReserved = (before.ownerFairs ?? []).reduce(
@@ -1746,7 +1747,9 @@ export class FairsService {
       if (!fair) throw new NotFoundException('Feira não encontrada.');
 
       if (fair.status !== FairStatus.ATIVA) {
-        throw new BadRequestException('Apenas feiras com status ATIVA podem ser finalizadas.');
+        throw new BadRequestException(
+          'Apenas feiras com status ATIVA podem ser finalizadas.',
+        );
       }
 
       // Todos viram CONCLUIDO

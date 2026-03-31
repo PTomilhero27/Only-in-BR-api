@@ -1,8 +1,15 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsArray, IsEnum, IsInt, IsOptional, Min, ValidateNested } from 'class-validator'
-import { Type } from 'class-transformer'
-import { StallSize } from '@prisma/client'
-import { OwnerFairInstallmentDto } from './owner-fair-installment.dto'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { StallSize } from '@prisma/client';
+import { OwnerFairInstallmentDto } from './owner-fair-installment.dto';
 
 /**
  * DTO de compra 1 por 1 (linha).
@@ -18,7 +25,7 @@ export class OwnerFairPurchaseDto {
     description: 'Tamanho da barraca comprada (linha 1 por 1).',
   })
   @IsEnum(StallSize)
-  stallSize: StallSize
+  stallSize: StallSize;
 
   @ApiProperty({
     example: 300000,
@@ -26,7 +33,7 @@ export class OwnerFairPurchaseDto {
   })
   @IsInt()
   @Min(0)
-  unitPriceCents: number
+  unitPriceCents: number;
 
   @ApiPropertyOptional({
     example: 100000,
@@ -36,7 +43,7 @@ export class OwnerFairPurchaseDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  paidCents?: number
+  paidCents?: number;
 
   @ApiPropertyOptional({
     example: 2,
@@ -46,7 +53,7 @@ export class OwnerFairPurchaseDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  installmentsCount?: number
+  installmentsCount?: number;
 
   @ApiPropertyOptional({
     type: [OwnerFairInstallmentDto],
@@ -61,5 +68,5 @@ export class OwnerFairPurchaseDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OwnerFairInstallmentDto)
-  installments?: OwnerFairInstallmentDto[]
+  installments?: OwnerFairInstallmentDto[];
 }

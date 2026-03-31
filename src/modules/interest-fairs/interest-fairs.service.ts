@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 // src/modules/interest-fairs/interest-fairs.service.ts
 import {
   BadRequestException,

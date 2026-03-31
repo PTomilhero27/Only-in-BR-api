@@ -1,6 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { MapElementType } from "@prisma/client";
-import { MapElementStyleDto } from "./map-template-style.dto";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { MapElementType } from '@prisma/client';
+import { MapElementStyleDto } from './map-template-style.dto';
 
 /**
  * MapTemplateElementResponseDto
@@ -11,10 +11,10 @@ import { MapElementStyleDto } from "./map-template-style.dto";
  * - Quem tem `elements` é o template (MapTemplateResponseDto)
  */
 export class MapTemplateElementResponseDto {
-  @ApiProperty({ example: "ck_xxxxx" })
+  @ApiProperty({ example: 'ck_xxxxx' })
   id!: string;
 
-  @ApiProperty({ example: "el_abcd123" })
+  @ApiProperty({ example: 'el_abcd123' })
   clientKey!: string;
 
   @ApiProperty({ enum: MapElementType, example: MapElementType.RECT })
@@ -35,7 +35,7 @@ export class MapTemplateElementResponseDto {
   @ApiPropertyOptional({ example: 80 })
   height?: number | null;
 
-  @ApiPropertyOptional({ example: "Área" })
+  @ApiPropertyOptional({ example: 'Área' })
   label?: string | null;
 
   @ApiPropertyOptional({ example: 1 })

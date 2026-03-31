@@ -10,7 +10,12 @@
  * - Usa @CurrentUser para determinar ownerId (não aceitamos ownerId via body/param)
  */
 import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
@@ -35,8 +40,8 @@ export class OwnersController {
   })
   @ApiOkResponse({ type: OwnerMeResponseDto })
   async getMe(@CurrentUser() user: JwtPayload): Promise<OwnerMeResponseDto> {
-    console.log("user")
-    console.log(user)
+    console.log('user');
+    console.log(user);
     return this.ownersService.getMe(user);
   }
 

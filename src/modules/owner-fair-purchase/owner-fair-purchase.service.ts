@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -371,7 +370,14 @@ export class OwnerFairPurchasesService {
       const purchase = await tx.ownerFairPurchase.findUnique({
         where: { id: purchaseId },
         include: {
-          ownerFair: { select: { id: true, ownerId: true, fairId: true, fair: { select: { status: true } } } },
+          ownerFair: {
+            select: {
+              id: true,
+              ownerId: true,
+              fairId: true,
+              fair: { select: { status: true } },
+            },
+          },
           installments: { orderBy: { number: 'asc' } },
         },
       });
@@ -382,7 +388,9 @@ export class OwnerFairPurchasesService {
         );
 
       if (purchase.ownerFair.fair.status === FairStatus.FINALIZADA) {
-        throw new BadRequestException('Ação não permitida em feira finalizada.');
+        throw new BadRequestException(
+          'Ação não permitida em feira finalizada.',
+        );
       }
 
       if (purchase.ownerFair.fairId !== fairId) {
@@ -564,7 +572,14 @@ export class OwnerFairPurchasesService {
       const purchase = await tx.ownerFairPurchase.findUnique({
         where: { id: purchaseId },
         include: {
-          ownerFair: { select: { id: true, ownerId: true, fairId: true, fair: { select: { status: true } } } },
+          ownerFair: {
+            select: {
+              id: true,
+              ownerId: true,
+              fairId: true,
+              fair: { select: { status: true } },
+            },
+          },
           installments: {
             orderBy: { number: 'asc' },
             include: { payments: { orderBy: { paidAt: 'asc' } } },
@@ -574,7 +589,9 @@ export class OwnerFairPurchasesService {
 
       if (!purchase) throw new NotFoundException('Compra não encontrada.');
       if (purchase.ownerFair.fair.status === FairStatus.FINALIZADA) {
-        throw new BadRequestException('Ação não permitida em feira finalizada.');
+        throw new BadRequestException(
+          'Ação não permitida em feira finalizada.',
+        );
       }
       if (purchase.ownerFair.fairId !== fairId)
         throw new BadRequestException('Compra não pertence à feira informada.');
@@ -701,7 +718,14 @@ export class OwnerFairPurchasesService {
       const purchase = await tx.ownerFairPurchase.findUnique({
         where: { id: purchaseId },
         include: {
-          ownerFair: { select: { id: true, ownerId: true, fairId: true, fair: { select: { status: true } } } },
+          ownerFair: {
+            select: {
+              id: true,
+              ownerId: true,
+              fairId: true,
+              fair: { select: { status: true } },
+            },
+          },
           installments: {
             orderBy: { number: 'asc' },
             include: { payments: { orderBy: { paidAt: 'asc' } } },
@@ -711,7 +735,9 @@ export class OwnerFairPurchasesService {
 
       if (!purchase) throw new NotFoundException('Compra não encontrada.');
       if (purchase.ownerFair.fair.status === FairStatus.FINALIZADA) {
-        throw new BadRequestException('Ação não permitida em feira finalizada.');
+        throw new BadRequestException(
+          'Ação não permitida em feira finalizada.',
+        );
       }
       if (purchase.ownerFair.fairId !== fairId)
         throw new BadRequestException('Compra não pertence à feira informada.');
@@ -886,7 +912,13 @@ export class OwnerFairPurchasesService {
       const purchase = await tx.ownerFairPurchase.findUnique({
         where: { id: purchaseId },
         include: {
-          ownerFair: { select: { fairId: true, ownerId: true, fair: { select: { status: true } } } },
+          ownerFair: {
+            select: {
+              fairId: true,
+              ownerId: true,
+              fair: { select: { status: true } },
+            },
+          },
           installments: true,
           adjustments: true,
         },
@@ -894,7 +926,9 @@ export class OwnerFairPurchasesService {
 
       if (!purchase) throw new NotFoundException('Compra não encontrada.');
       if (purchase.ownerFair.fair.status === FairStatus.FINALIZADA) {
-        throw new BadRequestException('Ação não permitida em feira finalizada.');
+        throw new BadRequestException(
+          'Ação não permitida em feira finalizada.',
+        );
       }
 
       if (purchase.ownerFair.fairId !== fairId)

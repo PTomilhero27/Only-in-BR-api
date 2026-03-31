@@ -18,7 +18,7 @@ import { AuditModule } from 'src/common/audit/audit.module';
  * - Pagamentos
  */
 @Module({
-  imports: [PrismaModule,  AuditModule],
+  imports: [PrismaModule, AuditModule],
   controllers: [FairsController],
   providers: [FairsService],
   exports: [FairsService],

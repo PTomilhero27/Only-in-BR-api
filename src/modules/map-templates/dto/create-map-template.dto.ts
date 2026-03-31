@@ -47,8 +47,7 @@ export class CreateMapTemplateDto {
 
   @ApiPropertyOptional({
     example: 2000,
-    description:
-      'Largura base do mundo do mapa (em pixels). Default: 2000.',
+    description: 'Largura base do mundo do mapa (em pixels). Default: 2000.',
   })
   @IsOptional()
   @IsInt()
@@ -57,8 +56,7 @@ export class CreateMapTemplateDto {
 
   @ApiPropertyOptional({
     example: 1200,
-    description:
-      'Altura base do mundo do mapa (em pixels). Default: 1200.',
+    description: 'Altura base do mundo do mapa (em pixels). Default: 1200.',
   })
   @IsOptional()
   @IsInt()

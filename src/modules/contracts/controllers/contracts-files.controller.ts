@@ -26,7 +26,9 @@ export class ContractsFilesController {
 
   private validatePdfOrThrow(file?: Express.Multer.File) {
     if (!file) {
-      throw new BadRequestException('Arquivo não enviado. Campo esperado: file.');
+      throw new BadRequestException(
+        'Arquivo não enviado. Campo esperado: file.',
+      );
     }
 
     if (file.mimetype !== 'application/pdf') {
@@ -88,10 +90,10 @@ export class ContractsFilesController {
     this.validatePdfOrThrow(file);
 
     return this.storage.uploadContractPdf({
-      contractId: body.contractId, 
+      contractId: body.contractId,
       fairId: body.fairId,
       ownerId: body.ownerId,
-      templateId, 
+      templateId,
       fileBuffer: file.buffer,
     });
   }

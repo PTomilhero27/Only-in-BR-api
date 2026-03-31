@@ -10,7 +10,9 @@ import { ExcelValueFormat } from '@prisma/client';
  * - ExcelJS usa padrões de numFmt do Excel.
  * - Para MONEY, o valor recomendado é number (em reais) com numFmt de moeda.
  */
-export function getExcelNumFmt(format: ExcelValueFormat | null | undefined): string | undefined {
+export function getExcelNumFmt(
+  format: ExcelValueFormat | null | undefined,
+): string | undefined {
   if (!format) return undefined;
 
   switch (format) {

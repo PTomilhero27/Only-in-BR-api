@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty } from '@nestjs/swagger';
 
 /**
  * Resposta do admin ao gerar um token de reset de senha do expositor.
@@ -9,13 +9,13 @@ import { ApiProperty } from '@nestjs/swagger'
  */
 export class CreateExhibitorPasswordResetTokenResponseDto {
   @ApiProperty({ example: 'kO3m0cYJp9Jc... (token bruto)' })
-  token!: string
+  token!: string;
 
   @ApiProperty({ example: '2026-02-10T15:30:00.000Z' })
-  expiresAt!: string
+  expiresAt!: string;
 
   @ApiProperty({
     example: 'https://portal.onlyinbr.com/resetar-senha?token=TOKEN_AQUI',
   })
-  resetUrl!: string
+  resetUrl!: string;
 }

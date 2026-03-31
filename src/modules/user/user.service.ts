@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -20,7 +25,12 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
-  create(data: { name: string; email: string; password: string; role?: UserRole }) {
+  create(data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: UserRole;
+  }) {
     return this.prisma.user.create({ data });
   }
 
@@ -109,20 +119,30 @@ export class UsersService {
    * Atualiza usuário do painel (não permite editar EXHIBITOR aqui).
    * Inclui troca de senha (opcional).
    */
-  async updateNonExhibitor(id: string, dto: UpdateUserDto, actorUserId: string) {
+  async updateNonExhibitor(
+    id: string,
+    dto: UpdateUserDto,
+    actorUserId: string,
+  ) {
     const before = await this.prisma.user.findUnique({ where: { id } });
     if (!before) throw new NotFoundException('Usuário não encontrado.');
 
     if (before.role === UserRole.EXHIBITOR) {
-      throw new BadRequestException('Usuário EXHIBITOR não pode ser editado por este endpoint.');
+      throw new BadRequestException(
+        'Usuário EXHIBITOR não pode ser editado por este endpoint.',
+      );
     }
 
     if (dto.role === UserRole.EXHIBITOR) {
-      throw new BadRequestException('Role EXHIBITOR deve ser gerenciada pelo fluxo do portal/expositor.');
+      throw new BadRequestException(
+        'Role EXHIBITOR deve ser gerenciada pelo fluxo do portal/expositor.',
+      );
     }
 
     if (dto.email && dto.email !== before.email) {
-      const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      const exists = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
       if (exists) throw new ConflictException('E-mail já cadastrado.');
     }
 

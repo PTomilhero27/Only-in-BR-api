@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { IsString } from 'class-validator'
+import { ApiProperty } from '@nestjs/swagger';
+import { IsString } from 'class-validator';
 
 /**
  * Params para desvincular barraca de uma feira no portal.
@@ -10,12 +10,12 @@ export class UnlinkStallParamsDto {
     description: 'ID da feira.',
   })
   @IsString()
-  fairId!: string
+  fairId!: string;
 
   @ApiProperty({
     example: 'ckv7w3z5p0001q8l1p2abcxyz',
     description: 'ID da barraca.',
   })
   @IsString()
-  stallId!: string
+  stallId!: string;
 }

@@ -3,18 +3,18 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-} from '@nestjs/common'
+} from '@nestjs/common';
 
-import { PrismaService } from 'src/prisma/prisma.service'
-import { PasswordTokenType, PersonType, UserRole } from '@prisma/client'
+import { PrismaService } from 'src/prisma/prisma.service';
+import { PasswordTokenType, PersonType, UserRole } from '@prisma/client';
 
-import { ListInterestsResponseDto } from './dto/list-interests-response.dto'
-import { ListInterestsDto } from './dto/list-interests.dto'
-import { GrantPortalAccessDto } from './dto/grant-portal-access.dto'
-import { GrantPortalAccessResponseDto } from './dto/grant-portal-access-response.dto'
-import { CreateExhibitorPasswordResetTokenResponseDto } from './dto/create-exhibitor-password-reset-token-response-dto'
+import { ListInterestsResponseDto } from './dto/list-interests-response.dto';
+import { ListInterestsDto } from './dto/list-interests.dto';
+import { GrantPortalAccessDto } from './dto/grant-portal-access.dto';
+import { GrantPortalAccessResponseDto } from './dto/grant-portal-access-response.dto';
+import { CreateExhibitorPasswordResetTokenResponseDto } from './dto/create-exhibitor-password-reset-token-response-dto';
 
-import { createHash, randomBytes } from 'crypto'
+import { createHash, randomBytes } from 'crypto';
 
 /**
  * Service do painel (admin) para Interessados.
@@ -36,19 +36,19 @@ export class InterestsService {
   // Listagem do painel
   // ------------------------------------------------------------
   async list(dto: ListInterestsDto): Promise<ListInterestsResponseDto> {
-    const page = dto.page ?? 1
-    const pageSize = dto.pageSize ?? 20
+    const page = dto.page ?? 1;
+    const pageSize = dto.pageSize ?? 20;
 
-    const skip = (page - 1) * pageSize
-    const take = pageSize
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
 
     const orderBy =
       dto.sort === 'createdAt_desc'
         ? ({ createdAt: 'desc' } as const)
-        : ({ updatedAt: 'desc' } as const)
+        : ({ updatedAt: 'desc' } as const);
 
-    const q = dto.q?.trim()
-    const qDigits = q ? this.digitsOnly(q) : ''
+    const q = dto.q?.trim();
+    const qDigits = q ? this.digitsOnly(q) : '';
 
     /**
      * Where de listagem do painel.
@@ -66,7 +66,7 @@ export class InterestsService {
             ...(qDigits ? [{ document: { contains: qDigits } }] : []),
           ],
         }
-      : {}
+      : {};
 
     const [totalItems, rows] = await Promise.all([
       this.prisma.owner.count({ where }),
@@ -102,10 +102,10 @@ export class InterestsService {
           updatedAt: true,
         },
       }),
-    ])
+    ]);
 
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
-    const ownerIds = rows.map((r) => r.id)
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const ownerIds = rows.map((r) => r.id);
 
     /**
      * ✅ stallsCount em lote (evita N+1).
@@ -116,11 +116,11 @@ export class InterestsService {
           where: { ownerId: { in: ownerIds } },
           _count: { _all: true },
         })
-      : []
+      : [];
 
-    const stallsCountMap = new Map<string, number>()
+    const stallsCountMap = new Map<string, number>();
     for (const g of stallsCounts) {
-      stallsCountMap.set(g.ownerId, g._count._all)
+      stallsCountMap.set(g.ownerId, g._count._all);
     }
 
     /**
@@ -140,12 +140,12 @@ export class InterestsService {
             passwordSetAt: true,
           },
         })
-      : []
+      : [];
 
-    const hasPortalLoginMap = new Map<string, boolean>()
+    const hasPortalLoginMap = new Map<string, boolean>();
     for (const u of exhibitorUsers) {
-      if (!u.ownerId) continue
-      hasPortalLoginMap.set(u.ownerId, Boolean(u.passwordSetAt))
+      if (!u.ownerId) continue;
+      hasPortalLoginMap.set(u.ownerId, Boolean(u.passwordSetAt));
     }
 
     const items = rows.map((r) => ({
@@ -183,7 +183,7 @@ export class InterestsService {
 
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
-    }))
+    }));
 
     return {
       items,
@@ -193,7 +193,7 @@ export class InterestsService {
         totalItems,
         totalPages,
       },
-    }
+    };
   }
 
   // ------------------------------------------------------------
@@ -220,28 +220,28 @@ export class InterestsService {
     ownerId: string,
     dto: GrantPortalAccessDto,
   ): Promise<GrantPortalAccessResponseDto> {
-    const expiresInMinutes = dto.expiresInMinutes ?? 60
-    const type = dto.type ?? PasswordTokenType.ACTIVATE_ACCOUNT
+    const expiresInMinutes = dto.expiresInMinutes ?? 60;
+    const type = dto.type ?? PasswordTokenType.ACTIVATE_ACCOUNT;
 
-    const portalBaseUrl = process.env.PORTAL_EXHIBITOR_BASE_URL
+    const portalBaseUrl = process.env.PORTAL_EXHIBITOR_BASE_URL;
     if (!portalBaseUrl) {
       throw new InternalServerErrorException(
         'PORTAL_EXHIBITOR_BASE_URL não configurado no ambiente.',
-      )
+      );
     }
 
     const owner = await this.prisma.owner.findUnique({
       where: { id: ownerId },
       select: { id: true, email: true, fullName: true },
-    })
+    });
 
-    if (!owner) throw new NotFoundException('Interessado não encontrado.')
+    if (!owner) throw new NotFoundException('Interessado não encontrado.');
 
     // Regra atual: precisamos de e-mail para criar conta do portal.
     if (!owner.email) {
       throw new BadRequestException(
         'Interessado sem e-mail cadastrado. Preencha antes de liberar acesso.',
-      )
+      );
     }
 
     /**
@@ -251,12 +251,12 @@ export class InterestsService {
       ownerId: owner.id,
       ownerEmail: owner.email,
       ownerFullName: owner.fullName ?? null,
-    })
+    });
 
     if (!user.isActive) {
       throw new BadRequestException(
         'Expositor inativo. Reative a conta antes de gerar acesso.',
-      )
+      );
     }
 
     /**
@@ -267,7 +267,7 @@ export class InterestsService {
       type,
       expiresInMinutes,
       portalBaseUrl,
-    })
+    });
 
     return {
       ownerId: owner.id,
@@ -275,7 +275,7 @@ export class InterestsService {
       tokenType: type,
       expiresAt: issued.expiresAt.toISOString(),
       activationLink: issued.accessLink,
-    }
+    };
   }
 
   // ------------------------------------------------------------
@@ -294,26 +294,26 @@ export class InterestsService {
    *   (mantendo a regra única e evitando "reset sem conta").
    */
   async createPasswordResetToken(input: {
-    ownerId: string
+    ownerId: string;
   }): Promise<CreateExhibitorPasswordResetTokenResponseDto> {
-    const portalBaseUrl = process.env.PORTAL_EXHIBITOR_BASE_URL
+    const portalBaseUrl = process.env.PORTAL_EXHIBITOR_BASE_URL;
     if (!portalBaseUrl) {
       throw new InternalServerErrorException(
         'PORTAL_EXHIBITOR_BASE_URL não configurado no ambiente.',
-      )
+      );
     }
 
     const owner = await this.prisma.owner.findUnique({
       where: { id: input.ownerId },
       select: { id: true, email: true, fullName: true },
-    })
+    });
 
-    if (!owner) throw new NotFoundException('Interessado não encontrado.')
+    if (!owner) throw new NotFoundException('Interessado não encontrado.');
 
     if (!owner.email) {
       throw new BadRequestException(
         'Interessado sem e-mail cadastrado. Preencha antes de gerar reset de senha.',
-      )
+      );
     }
 
     // ✅ Reusa a mesma lógica de garantia de usuário (evita erro de "não existe user")
@@ -321,12 +321,12 @@ export class InterestsService {
       ownerId: owner.id,
       ownerEmail: owner.email,
       ownerFullName: owner.fullName ?? null,
-    })
+    });
 
     if (!user.isActive) {
       throw new BadRequestException(
         'Expositor inativo. Reative a conta antes de gerar reset de senha.',
-      )
+      );
     }
 
     const issued = await this.issuePortalTokenForUser({
@@ -334,13 +334,13 @@ export class InterestsService {
       type: PasswordTokenType.RESET_PASSWORD,
       expiresInMinutes: 30,
       portalBaseUrl,
-    })
+    });
 
     return {
       token: issued.rawToken,
       expiresAt: issued.expiresAt.toISOString(),
       resetUrl: issued.accessLink,
-    }
+    };
   }
 
   // ------------------------------------------------------------
@@ -361,41 +361,62 @@ export class InterestsService {
    *    2.3) Não existe por email => cria
    */
   private async getOrCreateExhibitorUserForOwner(input: {
-    ownerId: string
-    ownerEmail: string
-    ownerFullName: string | null
-  }): Promise<{ id: string; email: string; isActive: boolean; ownerId: string | null; role: UserRole }> {
-    const ownerEmail = input.ownerEmail.trim().toLowerCase()
+    ownerId: string;
+    ownerEmail: string;
+    ownerFullName: string | null;
+  }): Promise<{
+    id: string;
+    email: string;
+    isActive: boolean;
+    ownerId: string | null;
+    role: UserRole;
+  }> {
+    const ownerEmail = input.ownerEmail.trim().toLowerCase();
 
     // 1) Tenta por ownerId (caminho feliz)
     const existingByOwner = await this.prisma.user.findFirst({
       where: { ownerId: input.ownerId, role: UserRole.EXHIBITOR },
-      select: { id: true, email: true, isActive: true, ownerId: true, role: true },
-    })
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        ownerId: true,
+        role: true,
+      },
+    });
 
     if (existingByOwner) {
-      return existingByOwner
+      return existingByOwner;
     }
 
     // 2) Tenta por email (para evitar violação do unique)
     const existingByEmail = await this.prisma.user.findUnique({
       where: { email: ownerEmail },
-      select: { id: true, email: true, isActive: true, ownerId: true, role: true },
-    })
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        ownerId: true,
+        role: true,
+      },
+    });
 
     if (existingByEmail) {
       // email pertence a um usuário do painel/staff
       if (existingByEmail.role !== UserRole.EXHIBITOR) {
         throw new BadRequestException(
           'Este e-mail já está em uso por um usuário do painel. Use outro e-mail no cadastro do expositor.',
-        )
+        );
       }
 
       // email já usado por outro expositor
-      if (existingByEmail.ownerId && existingByEmail.ownerId !== input.ownerId) {
+      if (
+        existingByEmail.ownerId &&
+        existingByEmail.ownerId !== input.ownerId
+      ) {
         throw new BadRequestException(
           'Este e-mail já está em uso por outro expositor. Verifique o cadastro antes de gerar acesso.',
-        )
+        );
       }
 
       // expositor existe, mas ainda não estava vinculado ao Owner => vincula agora
@@ -408,12 +429,18 @@ export class InterestsService {
             email: ownerEmail,
             isActive: true,
           },
-          select: { id: true, email: true, isActive: true, ownerId: true, role: true },
-        })
+          select: {
+            id: true,
+            email: true,
+            isActive: true,
+            ownerId: true,
+            role: true,
+          },
+        });
       }
 
       // ownerId já era o mesmo (caso raro pois não achou no findFirst, mas ok)
-      return existingByEmail
+      return existingByEmail;
     }
 
     // 3) Não existe: cria novo expositor
@@ -427,8 +454,14 @@ export class InterestsService {
         passwordSetAt: null,
         ownerId: input.ownerId,
       },
-      select: { id: true, email: true, isActive: true, ownerId: true, role: true },
-    })
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        ownerId: true,
+        role: true,
+      },
+    });
   }
 
   /**
@@ -443,17 +476,21 @@ export class InterestsService {
    * - Garantir sempre a mesma regra de expiração e invalidação.
    */
   private async issuePortalTokenForUser(input: {
-    userId: string
-    type: PasswordTokenType
-    expiresInMinutes: number
-    portalBaseUrl: string
+    userId: string;
+    type: PasswordTokenType;
+    expiresInMinutes: number;
+    portalBaseUrl: string;
   }): Promise<{ rawToken: string; expiresAt: Date; accessLink: string }> {
-    const expiresInMinutes = Number(input.expiresInMinutes)
+    const expiresInMinutes = Number(input.expiresInMinutes);
 
-    if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > 24 * 60) {
+    if (
+      !Number.isInteger(expiresInMinutes) ||
+      expiresInMinutes < 5 ||
+      expiresInMinutes > 24 * 60
+    ) {
       throw new BadRequestException(
         'expiresInMinutes inválido. Informe um valor em minutos coerente.',
-      )
+      );
     }
 
     // 1) invalida tokens antigos ainda válidos (evita múltiplos links ativos)
@@ -464,12 +501,12 @@ export class InterestsService {
         expiresAt: { gt: new Date() },
       },
       data: { usedAt: new Date() },
-    })
+    });
 
     // 2) gera token raw e hash
-    const rawToken = this.generateToken()
-    const tokenHash = this.hashToken(rawToken)
-    const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000)
+    const rawToken = this.generateToken();
+    const tokenHash = this.hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
 
     // 3) persiste (somente hash)
     await this.prisma.passwordResetToken.create({
@@ -480,12 +517,12 @@ export class InterestsService {
         expiresAt,
       },
       select: { id: true },
-    })
+    });
 
     // 4) link neutro do portal (serve para ativação e reset)
-    const accessLink = `${input.portalBaseUrl}/ativar?token=${encodeURIComponent(rawToken)}`
+    const accessLink = `${input.portalBaseUrl}/ativar?token=${encodeURIComponent(rawToken)}`;
 
-    return { rawToken, expiresAt, accessLink }
+    return { rawToken, expiresAt, accessLink };
   }
 
   // ------------------------------------------------------------
@@ -497,7 +534,7 @@ export class InterestsService {
    * Mantemos aqui para evitar dependência circular e deixar o caso de uso autocontido.
    */
   private digitsOnly(value: string): string {
-    return (value ?? '').replace(/\D/g, '')
+    return (value ?? '').replace(/\D/g, '');
   }
 
   /**
@@ -505,19 +542,22 @@ export class InterestsService {
    * - PF => 11 dígitos
    * - PJ => 14 dígitos
    */
-  private assertPersonTypeMatchesDocument(personType: PersonType, document: string): void {
-    const len = document.length
+  private assertPersonTypeMatchesDocument(
+    personType: PersonType,
+    document: string,
+  ): void {
+    const len = document.length;
 
     if (personType === PersonType.PF && len !== 11) {
       throw new BadRequestException(
         'personType=PF requer document com 11 dígitos (CPF).',
-      )
+      );
     }
 
     if (personType === PersonType.PJ && len !== 14) {
       throw new BadRequestException(
         'personType=PJ requer document com 14 dígitos (CNPJ).',
-      )
+      );
     }
   }
 
@@ -529,13 +569,13 @@ export class InterestsService {
    * - base64url é mais curto que hex e continua URL-safe.
    */
   private generateToken(): string {
-    return randomBytes(32).toString('base64url')
+    return randomBytes(32).toString('base64url');
   }
 
   /**
    * Hash idêntico ao usado no ExhibitorAuthService.validateToken/setPassword.
    */
   private hashToken(raw: string): string {
-    return createHash('sha256').update(raw).digest('hex')
+    return createHash('sha256').update(raw).digest('hex');
   }
 }

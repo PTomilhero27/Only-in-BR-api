@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { IsEnum, IsInt, Min } from 'class-validator'
-import { StallSize } from '@prisma/client'
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsInt, Min } from 'class-validator';
+import { StallSize } from '@prisma/client';
 
 /**
  * Representa um slot comprado pelo expositor na feira (por tamanho).
@@ -13,7 +13,7 @@ export class ExhibitorFairStallSlotDto {
     example: 'SIZE_3X3',
   })
   @IsEnum(StallSize, { message: 'stallSize inválido.' })
-  stallSize: StallSize
+  stallSize: StallSize;
 
   @ApiProperty({
     description: 'Quantidade comprada deste tamanho.',
@@ -21,7 +21,7 @@ export class ExhibitorFairStallSlotDto {
   })
   @IsInt({ message: 'qty deve ser um inteiro.' })
   @Min(0, { message: 'qty não pode ser negativo.' })
-  qty: number
+  qty: number;
 
   @ApiProperty({
     description: 'Preço unitário pago por barraca deste tamanho (em centavos).',
@@ -29,5 +29,5 @@ export class ExhibitorFairStallSlotDto {
   })
   @IsInt({ message: 'unitPriceCents deve ser um inteiro.' })
   @Min(0, { message: 'unitPriceCents não pode ser negativo.' })
-  unitPriceCents: number
+  unitPriceCents: number;
 }
