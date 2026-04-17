@@ -12,8 +12,8 @@ import { PublicInterestsService } from './public-interests.service';
  * - Expor rotas sob /public/interests/*
  *
  * Decisão:
- * - Este módulo depende do PrismaModule para persistência.
- * - Mantemos separado do módulo "Interests" (admin) para evitar mistura de rotas públicas e protegidas.
+ * - MailModule é @Global(), então MailService já está disponível via DI.
+ * - Mantemos separado do módulo "Interests" (admin) para evitar mistura de rotas.
  */
 @Module({
   imports: [PrismaModule],

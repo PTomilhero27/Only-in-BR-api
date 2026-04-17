@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MapElementType } from '@prisma/client';
+import { MapElementType, MarketplaceSlotStatus } from '@prisma/client';
 
 /**
  * DTOs de resposta “prontos para o front”.
@@ -113,6 +113,55 @@ export class FairMapBoothLinkResponseDto {
   stallFair?: FairMapLinkedStallFairDto | null;
 }
 
+export class FairMapSlotReservationResponseDto {
+  @ApiProperty({ example: 'ckv_res_123' })
+  id!: string;
+
+  @ApiProperty({ example: 'João da Silva' })
+  ownerName!: string;
+
+  @ApiPropertyOptional({ example: '11999999999', nullable: true })
+  ownerPhone?: string | null;
+
+  @ApiProperty({ example: 'SIZE_3X3' })
+  selectedTentType!: string;
+
+  @ApiProperty({ example: 15000 })
+  priceCents!: number;
+
+  @ApiProperty({ example: '2026-04-05T12:00:00Z' })
+  expiresAt!: string;
+}
+
+export class FairMapSlotResponseDto {
+  @ApiProperty({ example: 'ckv_slot_123' })
+  id!: string;
+
+  @ApiProperty({ example: 'el_slot_12' })
+  fairMapElementId!: string;
+
+  @ApiPropertyOptional({ example: 'A-12', nullable: true })
+  code?: string | null;
+
+  @ApiPropertyOptional({ example: 'Vaga 12', nullable: true })
+  label?: string | null;
+
+  @ApiProperty({ example: 15000 })
+  priceCents!: number;
+
+  @ApiProperty({ enum: MarketplaceSlotStatus, example: MarketplaceSlotStatus.AVAILABLE })
+  commercialStatus!: MarketplaceSlotStatus;
+
+  @ApiProperty({ example: true })
+  isPublic!: boolean;
+
+  @ApiPropertyOptional({ example: 'Perto da entrada', nullable: true })
+  notes?: string | null;
+
+  @ApiProperty({ type: [FairMapSlotReservationResponseDto] })
+  reservations!: FairMapSlotReservationResponseDto[];
+}
+
 export class FairMapResponseDto {
   @ApiProperty({ example: 'fair_123' })
   fairId!: string;
@@ -125,4 +174,7 @@ export class FairMapResponseDto {
 
   @ApiProperty({ type: [FairMapBoothLinkResponseDto] })
   links!: FairMapBoothLinkResponseDto[];
+
+  @ApiProperty({ type: [FairMapSlotResponseDto] })
+  slots!: FairMapSlotResponseDto[];
 }

@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { MarketplaceService } from './marketplace.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CreateReservationDto } from './dto/create-reservation.dto';
 
 @ApiTags('Marketplace')
 @ApiBearerAuth()
@@ -25,8 +26,9 @@ export class MarketplaceController {
   @ApiOperation({ summary: 'Reserva um slot do mapa temporariamente' })
   async createReservation(
     @Param('slotId') slotId: string,
+    @Body() dto: CreateReservationDto,
     @CurrentUser() user: any,
   ) {
-    return this.service.createReservation(user.ownerId, slotId);
+    return this.service.createReservation(user.ownerId, slotId, dto);
   }
 }

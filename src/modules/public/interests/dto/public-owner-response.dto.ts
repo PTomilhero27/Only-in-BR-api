@@ -5,11 +5,15 @@ import { ApiProperty } from '@nestjs/swagger';
  *
  * Responsabilidade:
  * - Retornar uma resposta mínima para o front confirmar que salvou.
- *
- * Decisão:
- * - Para o cadastro inicial, não precisamos devolver o Owner inteiro.
+ * - ✅ Inclui mensagem informando sobre a verificação de email.
  */
 export class PublicOwnerResponseDto {
   @ApiProperty({ example: 'ckx123...' })
   ownerId: string;
+
+  @ApiProperty({
+    example: 'Código de verificação enviado para seu email.',
+  })
+  message: string;
 }
+

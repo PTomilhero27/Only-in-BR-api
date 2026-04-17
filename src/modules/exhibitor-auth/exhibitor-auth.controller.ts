@@ -9,14 +9,17 @@ import { SetPasswordDto } from './dto/set-password.dto';
 import { SetPasswordResponseDto } from './dto/set-password-response.dto';
 import { LoginExhibitorDto } from './dto/login-exhibitor.dto';
 import { LoginExhibitorResponseDto } from './dto/login-exhibitor-response.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ForgotPasswordResponseDto } from './dto/forgot-password-response.dto';
 
 /**
  * Controller público para autenticação do expositor.
  *
- * Rotas públicas (token-based e login):
+ * Rotas públicas (token-based, login e recuperação):
  * - POST /exhibitor-auth/validate-token
  * - POST /exhibitor-auth/set-password
  * - POST /exhibitor-auth/login
+ * - POST /exhibitor-auth/forgot-password
  *
  * Observação:
  * - O restante do portal será autenticado via JWT posteriormente.
@@ -50,5 +53,20 @@ export class ExhibitorAuthController {
   @ApiOkResponse({ type: LoginExhibitorResponseDto })
   login(@Body() dto: LoginExhibitorDto): Promise<LoginExhibitorResponseDto> {
     return this.service.login(dto);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @ApiOperation({
+    summary: 'Solicitar reset de senha (self-service)',
+    description:
+      'Envia um email com link para redefinir a senha. ' +
+      'Retorna mensagem genérica por segurança (não informa se o email existe).',
+  })
+  @ApiOkResponse({ type: ForgotPasswordResponseDto })
+  forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+  ): Promise<ForgotPasswordResponseDto> {
+    return this.service.forgotPassword(dto);
   }
 }

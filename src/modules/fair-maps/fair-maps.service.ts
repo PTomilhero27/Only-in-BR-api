@@ -5,7 +5,12 @@ import {
 } from '@nestjs/common';
 import { SetFairMapTemplateDto } from './dto/set-fair-map-template.dto';
 import { LinkBoothSlotDto } from './dto/link-booth-slot.dto';
-import { FairStatus, MapElementType, MarketplaceSlotStatus } from '@prisma/client';
+import {
+  FairStatus,
+  MapElementType,
+  MarketplaceReservationStatus,
+  MarketplaceSlotStatus,
+} from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FairMapAvailableStallFairDto } from './dto/fair-map-available-stall-fair.dto';
 
@@ -68,7 +73,7 @@ export class FairMapsService {
    *    na tabela de Marketplace (FairMapSlot).
    * 3. Remove registros de Marketplace órfãos.
    */
-  private async syncDetailedFairMap(fairId: string) {
+  async syncDetailedFairMap(fairId: string) {
     const fairMap = await this.prisma.fairMap.findUnique({
       where: { fairId },
       include: {
@@ -87,7 +92,26 @@ export class FairMapsService {
             },
           },
         },
-        slots: true, // Slots de marketplace atuais
+        slots: {
+          select: {
+            id: true,
+            fairMapElementId: true,
+            commercialStatus: true,
+            reservations: {
+              where: {
+                status: {
+                  in: [
+                    MarketplaceReservationStatus.ACTIVE,
+                    MarketplaceReservationStatus.CONVERTED,
+                  ],
+                },
+              },
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -166,6 +190,121 @@ export class FairMapsService {
         where: {
           id: { in: orphanSlotIds },
         },
+      });
+    }
+
+    /**
+     * 4. Sincronização do commercialStatus dos slots com os links existentes.
+     *
+     * Sem este passo, um slot pode ter um FairMapBoothLink (barraca vinculada)
+     * mas ainda exibir commercialStatus=AVAILABLE — causando contagem errada
+     * de "disponíveis" no portal público.
+     */
+    const validLinks = fairMap.links.filter(
+      (link) =>
+        validSlotKeys.has(link.slotClientKey) &&
+        !!link.stallFair &&
+        link.stallFair.fairId === fairId,
+    );
+    const linkedSlotKeys = new Set(validLinks.map((l) => l.slotClientKey));
+
+    // Slots que estão vinculados mas não estão CONFIRMED → marcar como CONFIRMED
+    await this.prisma.fairMapSlot.updateMany({
+      where: {
+        fairMapId: fairMap.id,
+        fairMapElementId: { in: [...linkedSlotKeys] },
+        commercialStatus: MarketplaceSlotStatus.AVAILABLE,
+      },
+      data: { commercialStatus: MarketplaceSlotStatus.CONFIRMED },
+    });
+
+    // Slots que NÃO estão vinculados mas estão CONFIRMED → voltar para AVAILABLE
+    const unlinkedSlotKeys = [...validSlotKeys].filter(
+      (key) => !linkedSlotKeys.has(key),
+    );
+    if (unlinkedSlotKeys.length > 0) {
+      await this.prisma.fairMapSlot.updateMany({
+        where: {
+          fairMapId: fairMap.id,
+          fairMapElementId: { in: unlinkedSlotKeys },
+          commercialStatus: MarketplaceSlotStatus.CONFIRMED,
+        },
+        data: { commercialStatus: MarketplaceSlotStatus.AVAILABLE },
+      });
+    }
+
+    const convertedReservationKeys = new Set(
+      fairMap.slots
+        .filter((slot) =>
+          slot.reservations.some(
+            (reservation) =>
+              reservation.status === MarketplaceReservationStatus.CONVERTED,
+          ),
+        )
+        .map((slot) => slot.fairMapElementId)
+        .filter((slotKey) => validSlotKeys.has(slotKey)),
+    );
+
+    const activeReservationKeys = new Set(
+      fairMap.slots
+        .filter((slot) =>
+          slot.reservations.some(
+            (reservation) =>
+              reservation.status === MarketplaceReservationStatus.ACTIVE,
+          ),
+        )
+        .map((slot) => slot.fairMapElementId)
+        .filter((slotKey) => validSlotKeys.has(slotKey)),
+    );
+
+    if (convertedReservationKeys.size > 0) {
+      await this.prisma.fairMapSlot.updateMany({
+        where: {
+          fairMapId: fairMap.id,
+          fairMapElementId: { in: [...convertedReservationKeys] },
+          commercialStatus: {
+            in: [
+              MarketplaceSlotStatus.AVAILABLE,
+              MarketplaceSlotStatus.RESERVED,
+            ],
+          },
+        },
+        data: { commercialStatus: MarketplaceSlotStatus.CONFIRMED },
+      });
+    }
+
+    const reservedOnlySlotKeys = [...activeReservationKeys].filter(
+      (slotKey) => !convertedReservationKeys.has(slotKey),
+    );
+
+    if (reservedOnlySlotKeys.length > 0) {
+      await this.prisma.fairMapSlot.updateMany({
+        where: {
+          fairMapId: fairMap.id,
+          fairMapElementId: { in: reservedOnlySlotKeys },
+          commercialStatus: MarketplaceSlotStatus.AVAILABLE,
+        },
+        data: { commercialStatus: MarketplaceSlotStatus.RESERVED },
+      });
+    }
+
+    const reservationFreeSlotKeys = fairMap.slots
+      .map((slot) => slot.fairMapElementId)
+      .filter(
+        (slotKey) =>
+          validSlotKeys.has(slotKey) &&
+          !convertedReservationKeys.has(slotKey) &&
+          !activeReservationKeys.has(slotKey),
+      );
+
+    if (reservationFreeSlotKeys.length > 0) {
+      await this.prisma.fairMapSlot.updateMany({
+        where: {
+          fairMapId: fairMap.id,
+          fairMapElementId: { in: reservationFreeSlotKeys },
+          commercialStatus: MarketplaceSlotStatus.RESERVED,
+        },
+        data: { commercialStatus: MarketplaceSlotStatus.AVAILABLE },
       });
     }
 
@@ -277,6 +416,20 @@ export class FairMapsService {
             commercialStatus: true,
             isPublic: true,
             notes: true,
+            allowedTentTypes: true,
+            reservations: {
+              where: {
+                status: MarketplaceReservationStatus.ACTIVE,
+              },
+              include: {
+                owner: {
+                  select: {
+                    fullName: true,
+                    phone: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -352,6 +505,15 @@ export class FairMapsService {
         commercialStatus: s.commercialStatus,
         isPublic: s.isPublic,
         notes: s.notes,
+        allowedTentTypes: s.allowedTentTypes,
+        reservations: (s.reservations ?? []).map((r) => ({
+          id: r.id,
+          ownerName: r.owner.fullName ?? '—',
+          ownerPhone: r.owner.phone ?? null,
+          selectedTentType: r.selectedTentType,
+          priceCents: r.priceCents,
+          expiresAt: r.expiresAt?.toISOString(),
+        })),
       })),
     };
   }
@@ -476,6 +638,15 @@ export class FairMapsService {
         },
       });
 
+      // Restaura o status do slot para AVAILABLE ao desvincular
+      await this.prisma.fairMapSlot.updateMany({
+        where: {
+          fairMapId: fairMap.id,
+          fairMapElementId: slotClientKey,
+        },
+        data: { commercialStatus: MarketplaceSlotStatus.AVAILABLE },
+      });
+
       return this.getFairMap(fairId);
     }
 
@@ -516,6 +687,15 @@ export class FairMapsService {
       update: {
         stallFairId,
       },
+    });
+
+    // Atualiza o status do slot para CONFIRMED ao vincular uma barraca
+    await this.prisma.fairMapSlot.updateMany({
+      where: {
+        fairMapId: fairMap.id,
+        fairMapElementId: slotClientKey,
+      },
+      data: { commercialStatus: MarketplaceSlotStatus.CONFIRMED },
     });
 
     return this.getFairMap(fairId);

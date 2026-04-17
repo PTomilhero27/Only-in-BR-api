@@ -10,8 +10,16 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { MarketplaceInterestStatus, MarketplaceSlotStatus } from '@prisma/client';
+import {
+  MarketplaceInterestStatus,
+  MarketplaceSlotStatus,
+} from '@prisma/client';
 import { AdminMarketplaceService } from './admin-marketplace.service';
+import { UpdateSlotTentTypesDto } from './dto/update-slot-tent-types.dto';
+import { ConfirmReservationDto } from './dto/confirm-reservation.dto';
+import { NotifyMissingStallDto } from './dto/notify-missing-stall.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../../common/types/jwt-payload.type';
 
 @ApiTags('Admin Marketplace')
 @ApiBearerAuth()
@@ -28,6 +36,16 @@ export class AdminMarketplaceController {
     @Body('priceCents') priceCents: number,
   ) {
     return this.service.updateSlotPrice(slotId, priceCents);
+  }
+
+  @Patch('slots/:slotId/tent-types')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Configura tipos de barraca permitidos e preços.' })
+  updateSlotTentTypes(
+    @Param('slotId') slotId: string,
+    @Body() dto: UpdateSlotTentTypesDto,
+  ) {
+    return this.service.updateSlotTentTypes(slotId, dto.configurations);
   }
 
   @Patch('slots/:slotId/status')
@@ -71,6 +89,34 @@ export class AdminMarketplaceController {
   })
   listReservations(@Param('fairId') fairId: string) {
     return this.service.listFairReservations(fairId);
+  }
+
+  @Post('reservations/:id/confirm')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Confirma uma reserva e converte para vínculo na feira, compra financeira e barraca vinculada quando existir.',
+  })
+  confirmReservation(
+    @Param('id') reservationId: string,
+    @Body() dto: ConfirmReservationDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.confirmReservation(reservationId, dto, user);
+  }
+
+  @Post('reservations/:id/notify-missing-stall')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Envia alerta por e-mail ao expositor quando o slot estiver confirmado, mas ainda sem barraca vinculada.',
+  })
+  notifyMissingStall(
+    @Param('id') reservationId: string,
+    @Body() dto: NotifyMissingStallDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.notifyMissingStall(reservationId, dto, user);
   }
 
   @Patch('interests/:id/status-and-expiration')

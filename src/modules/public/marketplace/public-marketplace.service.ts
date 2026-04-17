@@ -52,6 +52,7 @@ export class PublicMarketplaceService {
             label: true,
             priceCents: true,
             commercialStatus: true,
+            allowedTentTypes: true,
           },
         },
       },

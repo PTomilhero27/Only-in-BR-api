@@ -28,6 +28,7 @@ import { MagicLinksModule } from './modules/magic-links/magic-links.module';
 import { MailModule } from './modules/mail/mail.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { PublicMarketplaceModule } from './modules/public/marketplace/public-marketplace.module';
+import { FairShowcaseModule } from './modules/fair-showcase/fair-showcase.module';
 
 @Global()
 @Module({
@@ -57,6 +58,7 @@ import { PublicMarketplaceModule } from './modules/public/marketplace/public-mar
     MailModule,
     MarketplaceModule,
     PublicMarketplaceModule,
+    FairShowcaseModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],

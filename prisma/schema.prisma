@@ -230,6 +230,11 @@ model User {
   passwordTokens PasswordResetToken[]
 
   /**
+   * Tokens de verificação de email (código 6 dígitos).
+   */
+  emailVerificationTokens EmailVerificationToken[]
+
+  /**
    * ✅ Vínculo com Owner (expositor).
    * Regra:
    * - role EXHIBITOR => ownerId obrigatório (validar no service)
@@ -288,6 +293,27 @@ model PasswordResetToken {
   @@index([type])
 }
 
+model EmailVerificationToken {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /**
+   * Hash do código numérico de 6 dígitos.
+   * Nunca armazenar o código puro no banco.
+   */
+  codeHash String
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 // =====================
 // MÓDULO DE FEIRAS
 // =====================
@@ -344,7 +370,60 @@ model Fair {
   marketplaceInterests    MarketplaceSlotInterest[]
   marketplaceReservations MarketplaceSlotReservation[]
 
+  /**
+   * ✅ Vitrine pública da feira (conteúdo editorial).
+   */
+  showcase FairShowcase?
+
   @@index([createdByUserId])
+}
+
+/**
+ * Vitrine pública de uma feira.
+ * ✅ Relação 1:1 com Fair.
+ * - Nem toda feira precisa de vitrine.
+ * - O admin cria a vitrine e configura conteúdo editorial.
+ * - Quando isPublished=true, aparece para o público.
+ */
+model FairShowcase {
+  id     String @id @default(cuid())
+  fairId String @unique
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  // ── Conteúdo editorial ──
+  subtitle         String?
+  description      String? // texto longo (pode ter \n para parágrafos)
+  shortDescription String? // resumo para card de listagem
+
+  coverImageUrl    String? // URL da imagem de capa (Supabase Storage)
+  galleryImageUrls Json    @default("[]") // String[] como JSON
+
+  /**
+   * Benefícios da feira (JSON array).
+   * Cada item: { icon: string, title: string, description: string }
+   */
+  benefits Json @default("[]")
+
+  /**
+   * FAQ da feira (JSON array).
+   * Cada item: { question: string, answer: string }
+   */
+  faq Json @default("[]")
+
+  // ── Contato / localização ──
+  whatsappNumber String?
+  city           String?
+  state          String?
+  locationLat    Float?
+  locationLng    Float?
+
+  // ── Controle ──
+  isPublished Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isPublished])
 }
 
 model FairTax {
@@ -410,6 +489,12 @@ model Owner {
   email String?
   phone String?
 
+  /**
+   * ID estável do signatário na Assinafy.
+   * Permite reutilizar o mesmo signer em contratos de feiras diferentes.
+   */
+  assinafySignerId String?
+
   addressFull    String?
   addressCity    String?
   addressState   String?
@@ -426,6 +511,12 @@ model Owner {
   bankHolderName String?
 
   stallsDescription String?
+
+  /**
+   * ✅ Quando o email foi verificado (código de 6 dígitos).
+   * null => email ainda não verificado.
+   */
+  emailVerifiedAt DateTime?
 
   /**
    * Vínculos deste expositor com feiras (âncora).
@@ -592,6 +683,8 @@ model Stall {
    */
   fairsParticipatedCount Int @default(0)
 
+  marketplaceSlotReservations MarketplaceSlotReservation[]
+
   @@unique([ownerId, pdvNameNormalized])
   @@index([ownerId])
 }
@@ -709,8 +802,7 @@ model OwnerFairPurchase {
    * Status financeiro desta compra.
    * Deve ser recalculado no service conforme pago/vencimentos.
    */
-  status OwnerFairPaymentStatus @default(PENDING)
-
+  status       OwnerFairPaymentStatus         @default(PENDING)
   /**
    * Parcelas vinculadas a esta compra.
    * Cada compra tem seu "plano" de vencimentos/valores.
@@ -1388,6 +1480,8 @@ model FairMapSlot {
   interests    MarketplaceSlotInterest[]
   reservations MarketplaceSlotReservation[]
 
+  allowedTentTypes FairMapSlotTentType[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1417,20 +1511,60 @@ model MarketplaceSlotInterest {
 }
 
 model MarketplaceSlotReservation {
-  id            String                       @id @default(cuid())
+  id            String      @id @default(cuid())
   fairId        String
-  fair          Fair                         @relation(fields: [fairId], references: [id], onDelete: Cascade)
+  fair          Fair        @relation(fields: [fairId], references: [id], onDelete: Cascade)
   fairMapSlotId String
-  fairMapSlot   FairMapSlot                  @relation(fields: [fairMapSlotId], references: [id], onDelete: Cascade)
+  fairMapSlot   FairMapSlot @relation(fields: [fairMapSlotId], references: [id], onDelete: Cascade)
   ownerId       String
-  owner         Owner                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  status        MarketplaceReservationStatus @default(ACTIVE)
-  expiresAt     DateTime?
+  owner         Owner       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  message String?
+
+  /**
+   * ✅ Barraca específica vinculada no momento da reserva (opcional)
+   */
+  stallId String?
+  stall   Stall?  @relation(fields: [stallId], references: [id], onDelete: SetNull)
+
+  /**
+   * ✅ Tipo de barraca escolhido (ou derivado da stallId)
+   */
+  selectedTentType StallSize?
+
+  /**
+   * ✅ Preço capturado no momento da reserva (snapshot)
+   */
+  priceCents Int @default(0)
+
+  status    MarketplaceReservationStatus @default(ACTIVE)
+  expiresAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([fairMapSlotId])
   @@index([ownerId])
+  @@index([stallId])
   @@index([status])
+}
+
+/**
+ * ✅ Define quais tipos de barraca um slot específico aceita e qual o preço.
+ * Decisão técnica:
+ * - O preço base de FairMapSlot agora é descontinuado em favor desta lista.
+ */
+model FairMapSlotTentType {
+  id            String      @id @default(cuid())
+  fairMapSlotId String
+  fairMapSlot   FairMapSlot @relation(fields: [fairMapSlotId], references: [id], onDelete: Cascade)
+
+  tentType   StallSize
+  priceCents Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fairMapSlotId, tentType])
+  @@index([fairMapSlotId])
 }

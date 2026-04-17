@@ -43,10 +43,25 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas.');
     }
 
+    /**
+     * 👤 Auto-link de Owner (Bug Fix):
+     * Se o usuário não tiver ownerId, tentamos encontrar um Owner com o mesmo e-mail
+     * e vinculamos automaticamente agora no login.
+     */
+    let ownerId = user.ownerId;
+    if (!ownerId) {
+      const owner = await this.usersService.findOwnerByEmail(email);
+      if (owner) {
+        await this.usersService.updateOwnerId(user.id, owner.id);
+        ownerId = owner.id;
+      }
+    }
+
     const access_token = await this.jwt.signAsync({
       sub: user.id,
       email: user.email,
       role: user.role,
+      ownerId,
     });
 
     return {
@@ -56,6 +71,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        ownerId,
       },
     };
   }

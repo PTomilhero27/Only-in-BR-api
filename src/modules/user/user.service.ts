@@ -34,6 +34,23 @@ export class UsersService {
     return this.prisma.user.create({ data });
   }
 
+  /**
+   * Busca um registro na tabela Owner pelo e-mail.
+   */
+  findOwnerByEmail(email: string) {
+    return this.prisma.owner.findFirst({ where: { email } });
+  }
+
+  /**
+   * Vincula um ownerId a um usuário existente.
+   */
+  updateOwnerId(userId: string, ownerId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { ownerId },
+    });
+  }
+
   // ====== novos (Admin) ======
 
   /**

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 
@@ -14,6 +15,7 @@ import { GrantPortalAccessDto } from './dto/grant-portal-access.dto';
 import { GrantPortalAccessResponseDto } from './dto/grant-portal-access-response.dto';
 import { CreateExhibitorPasswordResetTokenResponseDto } from './dto/create-exhibitor-password-reset-token-response-dto';
 
+import { MailService } from '../mail/mail.service';
 import { createHash, randomBytes } from 'crypto';
 
 /**
@@ -24,13 +26,16 @@ import { createHash, randomBytes } from 'crypto';
  * - Para acesso ao portal, usamos User vinculado ao Owner via user.ownerId.
  * - O link temporário (ativação/reset) usa PasswordResetToken já existente.
  *
- * Decisão (MVP sem e-mail transacional):
- * - O admin gera um link/token e repassa ao expositor (WhatsApp/presencial/etc.).
- * - O portal consome o token via /exhibitor-auth/validate-token e /exhibitor-auth/set-password.
+ * ✅ Agora envia email automaticamente ao gerar tokens de ativação/reset.
  */
 @Injectable()
 export class InterestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(InterestsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   // ------------------------------------------------------------
   // Listagem do painel
@@ -50,13 +55,6 @@ export class InterestsService {
     const q = dto.q?.trim();
     const qDigits = q ? this.digitsOnly(q) : '';
 
-    /**
-     * Where de listagem do painel.
-     *
-     * Decisão de UX:
-     * - Busca livre por nome, e-mail, cidade e documento.
-     * - Documento sempre comparado por dígitos (porque armazenamos normalizado).
-     */
     const where = q
       ? {
           OR: [
@@ -107,9 +105,6 @@ export class InterestsService {
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const ownerIds = rows.map((r) => r.id);
 
-    /**
-     * ✅ stallsCount em lote (evita N+1).
-     */
     const stallsCounts = ownerIds.length
       ? await this.prisma.stall.groupBy({
           by: ['ownerId'],
@@ -123,11 +118,6 @@ export class InterestsService {
       stallsCountMap.set(g.ownerId, g._count._all);
     }
 
-    /**
-     * ✅ status de login do portal em lote.
-     * Regra:
-     * - "tem login" quando existe User EXHIBITOR vinculado ao Owner e passwordSetAt != null
-     */
     const exhibitorUsers = ownerIds.length
       ? await this.prisma.user.findMany({
           where: {
@@ -171,14 +161,7 @@ export class InterestsService {
 
       stallsDescription: r.stallsDescription,
 
-      /**
-       * ✅ Badge "Com login/Sem login" no front.
-       */
       hasPortalLogin: hasPortalLoginMap.get(r.id) ?? false,
-
-      /**
-       * ✅ Contagem de barracas cadastradas.
-       */
       stallsCount: stallsCountMap.get(r.id) ?? 0,
 
       createdAt: r.createdAt.toISOString(),
@@ -207,14 +190,7 @@ export class InterestsService {
    * 1) Garante que existe um Owner.
    * 2) Cria ou reaproveita um User vinculado ao Owner (role=EXHIBITOR).
    * 3) Gera um token temporário (ativação ou reset) e devolve o link para o portal.
-   *
-   * Decisões de segurança:
-   * - O banco armazena apenas hash do token (tokenHash).
-   * - O token é uso único (usedAt) e expira (expiresAt).
-   * - Invalida tokens ainda válidos para evitar múltiplos links ativos.
-   *
-   * Nota de integridade:
-   * - Email de User é único no banco; por isso tratamos colisões com clareza.
+   * 4) ✅ Envia email para o expositor com o link de ativação/reset.
    */
   async grantPortalAccess(
     ownerId: string,
@@ -237,16 +213,12 @@ export class InterestsService {
 
     if (!owner) throw new NotFoundException('Interessado não encontrado.');
 
-    // Regra atual: precisamos de e-mail para criar conta do portal.
     if (!owner.email) {
       throw new BadRequestException(
         'Interessado sem e-mail cadastrado. Preencha antes de liberar acesso.',
       );
     }
 
-    /**
-     * 1) Garantir/extrair o User EXHIBITOR do Owner com tratamento de colisão de e-mail.
-     */
     const user = await this.getOrCreateExhibitorUserForOwner({
       ownerId: owner.id,
       ownerEmail: owner.email,
@@ -259,14 +231,19 @@ export class InterestsService {
       );
     }
 
-    /**
-     * 2) Emite token único (helper) e devolve link do portal.
-     */
     const issued = await this.issuePortalTokenForUser({
       userId: user.id,
       type,
       expiresInMinutes,
       portalBaseUrl,
+    });
+
+    // ✅ Enviar email com o link de ativação/reset
+    await this.sendPortalAccessEmail({
+      email: owner.email,
+      name: owner.fullName ?? '',
+      link: issued.accessLink,
+      type,
     });
 
     return {
@@ -284,14 +261,7 @@ export class InterestsService {
 
   /**
    * ✅ Atalho administrativo para reset de senha.
-   *
-   * Por que existe:
-   * - UX do painel: botão direto "Resetar senha".
-   *
-   * Importante:
-   * - Retorna token raw + link pronto para copiar.
-   * - Se o expositor ainda não tiver User criado, nós criamos/garantimos o User aqui também
-   *   (mantendo a regra única e evitando "reset sem conta").
+   * ✅ Agora envia email automaticamente com o link de reset.
    */
   async createPasswordResetToken(input: {
     ownerId: string;
@@ -316,7 +286,6 @@ export class InterestsService {
       );
     }
 
-    // ✅ Reusa a mesma lógica de garantia de usuário (evita erro de "não existe user")
     const user = await this.getOrCreateExhibitorUserForOwner({
       ownerId: owner.id,
       ownerEmail: owner.email,
@@ -336,6 +305,14 @@ export class InterestsService {
       portalBaseUrl,
     });
 
+    // ✅ Enviar email com link de reset
+    await this.sendPortalAccessEmail({
+      email: owner.email,
+      name: owner.fullName ?? '',
+      link: issued.accessLink,
+      type: PasswordTokenType.RESET_PASSWORD,
+    });
+
     return {
       token: issued.rawToken,
       expiresAt: issued.expiresAt.toISOString(),
@@ -349,16 +326,6 @@ export class InterestsService {
 
   /**
    * Garante um User EXHIBITOR vinculado ao Owner, tratando colisões de email (unique).
-   *
-   * Casos cobertos:
-   * 1) Já existe user por ownerId+EXHIBITOR => reutiliza
-   * 2) Não existe por ownerId:
-   *    2.1) Existe por email e role != EXHIBITOR => bloqueia (email pertence ao painel/staff)
-   *    2.2) Existe por email e role EXHIBITOR:
-   *         - ownerId diferente => bloqueia (email já usado por outro expositor)
-   *         - ownerId null => vincula ao owner (update)
-   *         - ownerId igual => reutiliza
-   *    2.3) Não existe por email => cria
    */
   private async getOrCreateExhibitorUserForOwner(input: {
     ownerId: string;
@@ -439,7 +406,7 @@ export class InterestsService {
         });
       }
 
-      // ownerId já era o mesmo (caso raro pois não achou no findFirst, mas ok)
+      // ownerId já era o mesmo
       return existingByEmail;
     }
 
@@ -465,15 +432,7 @@ export class InterestsService {
   }
 
   /**
-   * Emite um token temporário para o portal:
-   * - Invalida tokens antigos ainda válidos do mesmo usuário
-   * - Gera rawToken + tokenHash
-   * - Persiste PasswordResetToken
-   * - Retorna rawToken + link pronto do portal
-   *
-   * Por que existe:
-   * - Evitar duplicação entre "ativar conta" e "reset de senha".
-   * - Garantir sempre a mesma regra de expiração e invalidação.
+   * Emite um token temporário para o portal.
    */
   private async issuePortalTokenForUser(input: {
     userId: string;
@@ -493,7 +452,7 @@ export class InterestsService {
       );
     }
 
-    // 1) invalida tokens antigos ainda válidos (evita múltiplos links ativos)
+    // 1) invalida tokens antigos ainda válidos
     await this.prisma.passwordResetToken.updateMany({
       where: {
         userId: input.userId,
@@ -519,29 +478,100 @@ export class InterestsService {
       select: { id: true },
     });
 
-    // 4) link neutro do portal (serve para ativação e reset)
+    // 4) link neutro do portal
     const accessLink = `${input.portalBaseUrl}/ativar?token=${encodeURIComponent(rawToken)}`;
 
     return { rawToken, expiresAt, accessLink };
   }
 
   // ------------------------------------------------------------
-  // Helpers internos (gerais)
+  // Helpers internos (email)
   // ------------------------------------------------------------
 
   /**
-   * Normaliza qualquer string para "somente dígitos".
-   * Mantemos aqui para evitar dependência circular e deixar o caso de uso autocontido.
+   * ✅ Envia email com link de ativação ou reset de senha para o expositor.
    */
+  private async sendPortalAccessEmail(input: {
+    email: string;
+    name: string;
+    link: string;
+    type: PasswordTokenType;
+  }): Promise<void> {
+    const displayName = input.name || 'Expositor';
+    const isActivation = input.type === PasswordTokenType.ACTIVATE_ACCOUNT;
+
+    const subject = isActivation
+      ? 'Ativar conta — Only in BR'
+      : 'Redefinir senha — Only in BR';
+
+    const title = isActivation ? 'Ativar sua conta' : 'Redefinir sua senha';
+
+    const description = isActivation
+      ? 'Sua conta no portal foi liberada! Clique no botão abaixo para ativar sua conta e definir sua senha:'
+      : 'Recebemos uma solicitação para redefinir sua senha. Clique no botão abaixo para criar uma nova senha:';
+
+    const buttonText = isActivation
+      ? 'Ativar minha conta'
+      : 'Redefinir minha senha';
+
+    const html = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="color: #1a1a2e; font-size: 24px; margin: 0;">only in BR</h1>
+          <div style="width: 40px; height: 3px; background: linear-gradient(90deg, #e94560, #0f3460); margin: 12px auto;"></div>
+          <p style="color: #666; font-size: 14px; margin-top: 8px;">${title}</p>
+        </div>
+
+        <p style="color: #333; font-size: 16px; line-height: 1.6;">
+          Olá, <strong>${displayName}</strong>!
+        </p>
+
+        <p style="color: #555; font-size: 15px; line-height: 1.6;">
+          ${description}
+        </p>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${input.link}"
+             style="display: inline-block; background: linear-gradient(135deg, #e94560, #0f3460); color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; padding: 14px 40px; border-radius: 8px;">
+            ${buttonText}
+          </a>
+        </div>
+
+        <p style="color: #777; font-size: 13px; text-align: center;">
+          Este link é de uso único e tem validade limitada.
+        </p>
+
+        <p style="color: #999; font-size: 12px; line-height: 1.5;">
+          Se o botão não funcionar, copie e cole o link abaixo no seu navegador:<br />
+          <span style="color: #0f3460; word-break: break-all;">${input.link}</span>
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
+
+        <p style="color: #999; font-size: 12px; text-align: center; line-height: 1.5;">
+          Se você não solicitou esta ação, ignore este e-mail.<br />
+          © ${new Date().getFullYear()} Only in BR — Todos os direitos reservados.
+        </p>
+      </div>
+    `;
+
+    const sent = await this.mail.sendMail(input.email, subject, html);
+
+    if (!sent) {
+      this.logger.warn(
+        `Email de ${isActivation ? 'ativação' : 'reset'} não enviado para ${input.email}.`,
+      );
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Helpers internos (gerais)
+  // ------------------------------------------------------------
+
   private digitsOnly(value: string): string {
     return (value ?? '').replace(/\D/g, '');
   }
 
-  /**
-   * Garante coerência entre personType e tamanho do documento.
-   * - PF => 11 dígitos
-   * - PJ => 14 dígitos
-   */
   private assertPersonTypeMatchesDocument(
     personType: PersonType,
     document: string,
@@ -561,20 +591,10 @@ export class InterestsService {
     }
   }
 
-  /**
-   * Token aleatório, URL-safe.
-   * 32 bytes = bom nível de entropia para token temporário.
-   *
-   * Decisão:
-   * - base64url é mais curto que hex e continua URL-safe.
-   */
   private generateToken(): string {
     return randomBytes(32).toString('base64url');
   }
 
-  /**
-   * Hash idêntico ao usado no ExhibitorAuthService.validateToken/setPassword.
-   */
   private hashToken(raw: string): string {
     return createHash('sha256').update(raw).digest('hex');
   }

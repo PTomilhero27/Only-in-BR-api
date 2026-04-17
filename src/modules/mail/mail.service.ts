@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 
@@ -29,7 +31,7 @@ export class MailService {
 
     try {
       const info = await this.transporter.sendMail({
-        from: `"Feiras BR" <${process.env.SMTP_USER}>`,
+        from: `"Only in BR" <${process.env.SMTP_USER}>`,
         to,
         subject,
         html,

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -83,6 +84,33 @@ export class ContractsAssinafyService {
       .slice(0, 60);
   }
 
+  private normalizeEmail(email: string) {
+    return (email || '').trim().toLowerCase();
+  }
+
+  private getHttpErrorStatus(error: unknown): number | null {
+    if (error instanceof HttpException) {
+      return error.getStatus();
+    }
+
+    return null;
+  }
+
+  private isSignerAlreadyExistsError(error: unknown) {
+    const message =
+      error instanceof Error ? error.message : String(error || '');
+    const normalized = message
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    return (
+      normalized.includes('signatario com este e-mail ja existe') ||
+      normalized.includes('signatario com este email ja existe') ||
+      normalized.includes('already exists')
+    );
+  }
+
   /**
    * Baixa o PDF do Supabase Storage usando service role.
    * Evita depender de signedUrl.
@@ -111,6 +139,7 @@ export class ContractsAssinafyService {
     name: string;
     email: string;
   }): Promise<string> {
+    const normalizedEmail = this.normalizeEmail(params.email);
     const res = await fetch(
       `${this.assinafyBaseUrl()}/accounts/${this.assinafyAccountId()}/signers`,
       {
@@ -120,7 +149,10 @@ export class ContractsAssinafyService {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ full_name: params.name, email: params.email }),
+        body: JSON.stringify({
+          full_name: params.name,
+          email: normalizedEmail,
+        }),
       },
     );
 
@@ -133,8 +165,9 @@ export class ContractsAssinafyService {
     }
 
     if (!res.ok) {
-      throw new BadRequestException(
+      throw new HttpException(
         data?.message || data?.error || `Assinafy error (${res.status})`,
+        res.status,
       );
     }
 
@@ -151,9 +184,10 @@ export class ContractsAssinafyService {
   private async assinafyFindSignerByEmail(
     email: string,
   ): Promise<string | null> {
+    const normalizedEmail = this.normalizeEmail(email);
     const url =
       `${this.assinafyBaseUrl()}/accounts/${this.assinafyAccountId()}/signers?email=` +
-      encodeURIComponent(email.trim());
+      encodeURIComponent(normalizedEmail);
 
     const res = await fetch(url, {
       method: 'GET',
@@ -172,38 +206,137 @@ export class ContractsAssinafyService {
     }
 
     if (!res.ok) {
-      throw new BadRequestException(
+      throw new HttpException(
         data?.message ||
           data?.error ||
           `Assinafy list signers error (${res.status})`,
+        res.status,
       );
     }
 
     const list = Array.isArray(data) ? data : data.items || data.data || [];
     const found = list.find(
       (s: any) =>
-        String(s?.email || '').toLowerCase() === email.trim().toLowerCase(),
+        this.normalizeEmail(String(s?.email || '')) === normalizedEmail,
     );
 
     if (!found?.id) return null;
     return String(found.id);
   }
 
+  private async assinafyTryFindSignerByEmail(
+    email: string,
+  ): Promise<string | null> {
+    try {
+      return await this.assinafyFindSignerByEmail(email);
+    } catch (error) {
+      const status = this.getHttpErrorStatus(error);
+
+      if (status && [400, 404, 405, 422, 501].includes(status)) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
   private async assinafyGetOrCreateSigner(params: {
     name: string;
     email: string;
   }): Promise<{ signerId: string; created: boolean }> {
+    const existing = await this.assinafyTryFindSignerByEmail(params.email);
+    if (existing) {
+      return { signerId: existing, created: false };
+    }
+
     try {
       const signerId = await this.assinafyCreateSigner(params);
       return { signerId, created: true };
-    } catch (e: any) {
-      const msg = String(e?.message || '').toLowerCase();
-      if (msg.includes('já existe') || msg.includes('already')) {
-        const found = await this.assinafyFindSignerByEmail(params.email);
+    } catch (error) {
+      if (this.isSignerAlreadyExistsError(error)) {
+        const found = await this.assinafyTryFindSignerByEmail(params.email);
         if (found) return { signerId: found, created: false };
       }
-      throw e;
+
+      throw error;
     }
+  }
+
+  private async persistSignerReference(params: {
+    ownerId: string;
+    contractId: string;
+    signerId: string;
+    ownerSignerId?: string | null;
+    contractSignerId?: string | null;
+  }) {
+    const shouldUpdateOwner = params.ownerSignerId !== params.signerId;
+    const shouldUpdateContract = params.contractSignerId !== params.signerId;
+
+    if (shouldUpdateOwner && shouldUpdateContract) {
+      await this.prisma.$transaction([
+        this.prisma.owner.update({
+          where: { id: params.ownerId },
+          data: { assinafySignerId: params.signerId },
+        }),
+        this.prisma.contract.update({
+          where: { id: params.contractId },
+          data: { assinafySignerId: params.signerId },
+        }),
+      ]);
+      return;
+    }
+
+    if (shouldUpdateOwner) {
+      await this.prisma.owner.update({
+        where: { id: params.ownerId },
+        data: { assinafySignerId: params.signerId },
+      });
+    }
+
+    if (shouldUpdateContract) {
+      await this.prisma.contract.update({
+        where: { id: params.contractId },
+        data: { assinafySignerId: params.signerId },
+      });
+    }
+  }
+
+  private async resolveSignerId(params: {
+    ownerId: string;
+    contractId: string;
+    ownerSignerId?: string | null;
+    contractSignerId?: string | null;
+    name: string;
+    email: string;
+  }) {
+    const persistedSignerId = params.ownerSignerId ?? params.contractSignerId;
+
+    if (persistedSignerId) {
+      await this.persistSignerReference({
+        ownerId: params.ownerId,
+        contractId: params.contractId,
+        signerId: persistedSignerId,
+        ownerSignerId: params.ownerSignerId,
+        contractSignerId: params.contractSignerId,
+      });
+
+      return persistedSignerId;
+    }
+
+    const signer = await this.assinafyGetOrCreateSigner({
+      name: params.name,
+      email: params.email,
+    });
+
+    await this.persistSignerReference({
+      ownerId: params.ownerId,
+      contractId: params.contractId,
+      signerId: signer.signerId,
+      ownerSignerId: params.ownerSignerId,
+      contractSignerId: params.contractSignerId,
+    });
+
+    return signer.signerId;
   }
 
   private async assinafyCreateDocumentFromPdf(params: {
@@ -363,7 +496,13 @@ export class ContractsAssinafyService {
         id: true,
         status: true,
         contractSignedAt: true,
-        owner: { select: { document: true } },
+        owner: {
+          select: {
+            id: true,
+            document: true,
+            assinafySignerId: true,
+          },
+        },
         fair: {
           select: {
             status: true,
@@ -413,6 +552,19 @@ export class ContractsAssinafyService {
       },
     });
 
+    const knownSignerId =
+      ownerFair.owner.assinafySignerId ?? contract.assinafySignerId ?? null;
+
+    if (knownSignerId) {
+      await this.persistSignerReference({
+        ownerId: ownerFair.owner.id,
+        contractId: contract.id,
+        signerId: knownSignerId,
+        ownerSignerId: ownerFair.owner.assinafySignerId,
+        contractSignerId: contract.assinafySignerId,
+      });
+    }
+
     /**
      * ✅ Caso já esteja assinado:
      * Retornamos OK para o front, para ele parar de tentar e atualizar a tela.
@@ -422,7 +574,7 @@ export class ContractsAssinafyService {
         signUrl: contract.signUrl ?? '',
         contractId: contract.id,
         assinafyDocumentId: contract.assinafyDocumentId ?? '',
-        assinafySignerId: contract.assinafySignerId ?? '',
+        assinafySignerId: knownSignerId ?? '',
         reused: true,
         alreadySigned: true,
       };
@@ -446,7 +598,7 @@ export class ContractsAssinafyService {
         signUrl: contract.signUrl,
         contractId: contract.id,
         assinafyDocumentId: contract.assinafyDocumentId ?? '',
-        assinafySignerId: contract.assinafySignerId ?? '',
+        assinafySignerId: knownSignerId ?? '',
         reused: true,
       };
     }
@@ -459,19 +611,14 @@ export class ContractsAssinafyService {
     }
 
     // 4) signer (cria/reutiliza)
-    let signerId = contract.assinafySignerId;
-    if (!signerId) {
-      const signer = await this.assinafyGetOrCreateSigner({
-        name: dto.name,
-        email: dto.email,
-      });
-      signerId = signer.signerId;
-
-      await this.prisma.contract.update({
-        where: { id: contract.id },
-        data: { assinafySignerId: signerId },
-      });
-    }
+    const signerId = await this.resolveSignerId({
+      ownerId: ownerFair.owner.id,
+      contractId: contract.id,
+      ownerSignerId: ownerFair.owner.assinafySignerId,
+      contractSignerId: contract.assinafySignerId,
+      name: dto.name,
+      email: dto.email,
+    });
 
     // 5) documentId (cria/reutiliza)
     let documentId = contract.assinafyDocumentId;
@@ -538,3 +685,4 @@ export class ContractsAssinafyService {
     };
   }
 }
+

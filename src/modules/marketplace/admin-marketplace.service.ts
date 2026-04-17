@@ -3,18 +3,24 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { MailService } from '../mail/mail.service';
 import {
   MarketplaceInterestStatus,
   MarketplaceSlotStatus,
+  StallSize,
 } from '@prisma/client';
+import type { JwtPayload } from '../../common/types/jwt-payload.type';
+import { PrismaService } from '../../prisma/prisma.service';
+import { MarketplaceReservationConfirmationService } from './marketplace-reservation-confirmation.service';
+import { ConfirmReservationDto } from './dto/confirm-reservation.dto';
+import { NotifyMissingStallDto } from './dto/notify-missing-stall.dto';
+import { MarketplaceMissingStallNotificationService } from './marketplace-missing-stall-notification.service';
 
 @Injectable()
 export class AdminMarketplaceService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mail: MailService,
+    private readonly reservationConfirmation: MarketplaceReservationConfirmationService,
+    private readonly missingStallNotification: MarketplaceMissingStallNotificationService,
   ) {}
 
   async updateSlotPrice(fairMapSlotId: string, priceCents: number) {
@@ -33,6 +39,48 @@ export class AdminMarketplaceService {
     return this.prisma.fairMapSlot.update({
       where: { id: fairMapSlotId },
       data: { priceCents },
+    });
+  }
+
+  async updateSlotTentTypes(
+    fairMapSlotId: string,
+    configurations: { tentType: StallSize; priceCents: number }[],
+  ) {
+    const slot = await this.prisma.fairMapSlot.findUnique({
+      where: { id: fairMapSlotId },
+    });
+
+    if (!slot) {
+      throw new NotFoundException('Slot não encontrado.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.fairMapSlotTentType.deleteMany({
+        where: { fairMapSlotId },
+      });
+
+      await tx.fairMapSlotTentType.createMany({
+        data: configurations.map((configuration) => ({
+          fairMapSlotId,
+          tentType: configuration.tentType,
+          priceCents: configuration.priceCents,
+        })),
+      });
+
+      if (configurations.length > 0) {
+        const minPrice = Math.min(
+          ...configurations.map((configuration) => configuration.priceCents),
+        );
+        await tx.fairMapSlot.update({
+          where: { id: fairMapSlotId },
+          data: { priceCents: minPrice },
+        });
+      }
+
+      return tx.fairMapSlot.findUnique({
+        where: { id: fairMapSlotId },
+        include: { allowedTentTypes: true },
+      });
     });
   }
 
@@ -68,8 +116,49 @@ export class AdminMarketplaceService {
       include: {
         owner: true,
         fairMapSlot: true,
+        stall: true,
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async confirmReservation(
+    reservationId: string,
+    dto: ConfirmReservationDto,
+    actor: JwtPayload,
+  ) {
+    return this.reservationConfirmation.confirm({
+      reservationId,
+      actorUserId: actor.id,
+      source: 'ADMIN_PANEL',
+      payment: {
+        unitPriceCents: dto.unitPriceCents,
+        paidCents: dto.paidCents,
+        installmentsCount: dto.installmentsCount,
+        installments: dto.installments,
+        approval: {
+          approved: true,
+          approvedAt: new Date(),
+          approvalReference: 'admin_manual_confirmation',
+          provider: 'admin',
+        },
+      },
+      binding: {
+        stallId: dto.stallId,
+      },
+    });
+  }
+
+  async notifyMissingStall(
+    reservationId: string,
+    dto: NotifyMissingStallDto,
+    actor: JwtPayload,
+  ) {
+    return this.missingStallNotification.notifyMissingStall({
+      reservationId,
+      actorUserId: actor.id,
+      force: dto.force,
+      notes: dto.notes,
     });
   }
 
@@ -96,10 +185,6 @@ export class AdminMarketplaceService {
         },
       });
 
-      // Se o admin setou o interesse para NEGOTIATING ou CONVERTED
-      // E o slot estava AVAILABLE, o admin provavelmente quer trancar o mapa.
-      // O admin já pode gerenciar o slot fisicamente no `updateSlotStatus`,
-      // mas se estivermos em "NEGOTIATING", seria bom forçar "RESERVED".
       if (
         status === MarketplaceInterestStatus.NEGOTIATING &&
         interest.fairMapSlot.commercialStatus === MarketplaceSlotStatus.AVAILABLE
@@ -110,7 +195,6 @@ export class AdminMarketplaceService {
         });
       }
 
-      // Se confirmou a venda do interesse, passamos o Mapa para CONFIRMED
       if (
         status === MarketplaceInterestStatus.CONVERTED &&
         interest.fairMapSlot.commercialStatus !== MarketplaceSlotStatus.CONFIRMED
@@ -121,9 +205,9 @@ export class AdminMarketplaceService {
         });
       }
 
-      // Se dispensou ou expirou um interesse q tava em negociação
       if (
-        (status === MarketplaceInterestStatus.DISMISSED || status === MarketplaceInterestStatus.EXPIRED) &&
+        (status === MarketplaceInterestStatus.DISMISSED ||
+          status === MarketplaceInterestStatus.EXPIRED) &&
         interest.fairMapSlot.commercialStatus === MarketplaceSlotStatus.RESERVED
       ) {
         await tx.fairMapSlot.update({

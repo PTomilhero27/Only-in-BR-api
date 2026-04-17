@@ -8,4 +8,5 @@ export type JwtPayload = {
   sub: string; // userId
   email: string;
   role: string;
+  ownerId?: string;
 };

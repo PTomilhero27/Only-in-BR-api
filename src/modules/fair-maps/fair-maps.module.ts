@@ -7,5 +7,6 @@ import { MarketplaceModule } from '../marketplace/marketplace.module';
   imports: [MarketplaceModule],
   controllers: [FairMapsController],
   providers: [FairMapsService],
+  exports: [FairMapsService],
 })
 export class FairMapsModule {}
