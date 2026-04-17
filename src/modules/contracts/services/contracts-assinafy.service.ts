@@ -88,6 +88,58 @@ export class ContractsAssinafyService {
     return (email || '').trim().toLowerCase();
   }
 
+  private extractSignerIdFromPayload(payload: any): string | null {
+    const signerId =
+      payload?.id ??
+      payload?.data?.id ??
+      payload?.data?.[0]?.id ??
+      payload?.signer?.id ??
+      payload?.result?.id;
+
+    return signerId ? String(signerId) : null;
+  }
+
+  private extractSignerListFromPayload(payload: any): any[] {
+    const candidates = [
+      payload,
+      payload?.data,
+      payload?.items,
+      payload?.results,
+      payload?.signers,
+      payload?.data?.items,
+      payload?.data?.results,
+      payload?.data?.signers,
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        return candidate;
+      }
+    }
+
+    return [];
+  }
+
+  private findSignerIdInListByEmail(payload: any, email: string): string | null {
+    const normalizedEmail = this.normalizeEmail(email);
+    const signers = this.extractSignerListFromPayload(payload);
+    const found = signers.find((signer: any) => {
+      const signerEmail = this.normalizeEmail(
+        String(
+          signer?.email ??
+            signer?.mail ??
+            signer?.signer?.email ??
+            signer?.attributes?.email ??
+            '',
+        ),
+      );
+
+      return signerEmail === normalizedEmail;
+    });
+
+    return found?.id ? String(found.id) : null;
+  }
+
   private getHttpErrorStatus(error: unknown): number | null {
     if (error instanceof HttpException) {
       return error.getStatus();
@@ -171,7 +223,7 @@ export class ContractsAssinafyService {
       );
     }
 
-    const signerId = data?.id ?? data?.data?.[0]?.id ?? data?.data?.id;
+    const signerId = this.extractSignerIdFromPayload(data);
     if (!signerId) {
       throw new InternalServerErrorException(
         'Assinafy não retornou signer id.',
@@ -185,43 +237,59 @@ export class ContractsAssinafyService {
     email: string,
   ): Promise<string | null> {
     const normalizedEmail = this.normalizeEmail(email);
-    const url =
-      `${this.assinafyBaseUrl()}/accounts/${this.assinafyAccountId()}/signers?email=` +
-      encodeURIComponent(normalizedEmail);
+    const baseUrl = `${this.assinafyBaseUrl()}/accounts/${this.assinafyAccountId()}/signers`;
+    const headers = {
+      Authorization: `Bearer ${this.assinafyKey()}`,
+      Accept: 'application/json',
+    };
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${this.assinafyKey()}`,
-        Accept: 'application/json',
-      },
-    });
+    const fetchSigners = async (url: string) => {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
 
-    const text = await res.text();
-    let data: any = {};
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { raw: text };
+      }
+
+      if (!res.ok) {
+        throw new HttpException(
+          data?.message ||
+            data?.error ||
+            `Assinafy list signers error (${res.status})`,
+          res.status,
+        );
+      }
+
+      return data;
+    };
+
     try {
-      data = JSON.parse(text);
-    } catch {
-      data = { raw: text };
-    }
-
-    if (!res.ok) {
-      throw new HttpException(
-        data?.message ||
-          data?.error ||
-          `Assinafy list signers error (${res.status})`,
-        res.status,
+      const filteredData = await fetchSigners(
+        `${baseUrl}?email=${encodeURIComponent(normalizedEmail)}`,
       );
+      const signerId =
+        this.findSignerIdInListByEmail(filteredData, normalizedEmail) ??
+        this.extractSignerIdFromPayload(filteredData);
+
+      if (signerId) {
+        return signerId;
+      }
+    } catch (error) {
+      const status = this.getHttpErrorStatus(error);
+
+      if (!status || ![400, 404, 405, 422, 501].includes(status)) {
+        throw error;
+      }
     }
 
-    const list = Array.isArray(data) ? data : data.items || data.data || [];
-    const found = list.find(
-      (s: any) =>
-        this.normalizeEmail(String(s?.email || '')) === normalizedEmail,
-    );
-
-    if (!found?.id) return null;
-    return String(found.id);
+    const unfilteredData = await fetchSigners(baseUrl);
+    return this.findSignerIdInListByEmail(unfilteredData, normalizedEmail);
   }
 
   private async assinafyTryFindSignerByEmail(
@@ -238,6 +306,26 @@ export class ContractsAssinafyService {
 
       throw error;
     }
+  }
+
+  private async findPersistedSignerIdByEmail(
+    ownerId: string,
+    email: string,
+  ): Promise<string | null> {
+    const normalizedEmail = this.normalizeEmail(email);
+
+    const owner = await this.prisma.owner.findFirst({
+      where: {
+        id: { not: ownerId },
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+        assinafySignerId: { not: null },
+      },
+      select: {
+        assinafySignerId: true,
+      },
+    });
+
+    return owner?.assinafySignerId ?? null;
   }
 
   private async assinafyGetOrCreateSigner(params: {
@@ -321,6 +409,23 @@ export class ContractsAssinafyService {
       });
 
       return persistedSignerId;
+    }
+
+    const persistedSignerIdByEmail = await this.findPersistedSignerIdByEmail(
+      params.ownerId,
+      params.email,
+    );
+
+    if (persistedSignerIdByEmail) {
+      await this.persistSignerReference({
+        ownerId: params.ownerId,
+        contractId: params.contractId,
+        signerId: persistedSignerIdByEmail,
+        ownerSignerId: params.ownerSignerId,
+        contractSignerId: params.contractSignerId,
+      });
+
+      return persistedSignerIdByEmail;
     }
 
     const signer = await this.assinafyGetOrCreateSigner({
