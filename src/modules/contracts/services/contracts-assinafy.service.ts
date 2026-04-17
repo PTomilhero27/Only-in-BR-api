@@ -1,3 +1,8 @@
+/* eslint-disable @typescript-eslint/no-base-to-string */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   BadRequestException,
   HttpException,
@@ -25,9 +30,11 @@ import { FairStatus, OwnerFairStatus, UserRole } from '@prisma/client';
  * - 1 Contract por OwnerFair (ownerFairId unique)
  * - PDF é fonte de verdade (Contract.pdfPath)
  *
- * ✅ Regra nova solicitada:
- * - Se contract.signUrl já está preenchido => BLOQUEIA (não pode gerar novamente).
- *   Motivo: o PDF enviado para a Assinafy deve ser o "último" e não pode mudar depois.
+ * ✅ Regra atual:
+ * - O signer deve respeitar o nome/e-mail exatos recebidos do front.
+ * - Se já existir link anterior, o fluxo pode ser renovado.
+ * - Se o signer mudar, um novo documento é criado para evitar reaproveitar
+ *   um fluxo antigo com destinatário diferente.
  */
 @Injectable()
 export class ContractsAssinafyService {
@@ -359,9 +366,9 @@ export class ContractsAssinafyService {
     dto: Pick<CreateAssinafySignUrlDto, 'name' | 'email'>;
   }) {
     const email = this.normalizeEmail(
-      params.owner.email ?? params.owner.users?.[0]?.email ?? '',
+      params.dto.email ?? params.owner.email ?? params.owner.users?.[0]?.email ?? '',
     );
-    const name = (params.owner.fullName ?? params.dto.name ?? '').trim();
+    const name = (params.dto.name ?? params.owner.fullName ?? '').trim();
 
     if (!email) {
       throw new BadRequestException(
@@ -594,11 +601,6 @@ export class ContractsAssinafyService {
   /**
    * createOrReuseSignUrl
    *
-   * ✅ Regra nova:
-   * - se signUrl estiver preenchida, BLOQUEIA.
-   * - se contractSignedAt estiver preenchido, BLOQUEIA.
-   */
-  /**
    * createOrReuseSignUrl
    *
    * Responsabilidade:
@@ -606,10 +608,11 @@ export class ContractsAssinafyService {
    * - Garantir que existe PDF salvo (pdfPath)
    * - Criar/reutilizar signer
    * - Criar/reutilizar document
-   * - Criar assignment virtual e derivar signUrl
+   * - Criar/renovar assignment virtual e derivar signUrl
    *
    * Regra de robustez para o front:
-   * - Se signUrl já existir, RETORNA (reused=true), não lança erro.
+   * - Se signUrl já existir, pode renovar o fluxo para o mesmo signer.
+   * - Se o e-mail/nome vier diferente do front, o fluxo deve respeitar esses dados.
    * - Se já assinou (contractSignedAt ou Contract.signedAt), RETORNA (alreadySigned=true).
    *
    * Motivo:
@@ -710,15 +713,13 @@ export class ContractsAssinafyService {
       };
     }
 
-    /**
-     * ✅ Caso já exista link:
-     * NÃO lançar erro. Apenas devolver o que já foi gerado.
-     * Isso resolve: “criou mas o front não recebeu resposta”.
-     */
     const signerProfile = this.resolveOwnerSignerProfile({
       owner: ownerFair.owner,
       dto,
     });
+
+    const previousSignerId =
+      contract.assinafySignerId ?? ownerFair.owner.assinafySignerId ?? null;
 
     const signerId = await this.resolveSignerId({
       ownerId: ownerFair.owner.id,
@@ -729,29 +730,11 @@ export class ContractsAssinafyService {
       email: signerProfile.email,
     });
 
-    const shouldRegenerateSignatureFlow = Boolean(
+    const shouldRegenerateDocument = Boolean(
       contract.signUrl &&
-        contract.assinafySignerId &&
-        contract.assinafySignerId !== signerId,
+        previousSignerId &&
+        previousSignerId !== signerId,
     );
-
-    if (contract.signUrl && !shouldRegenerateSignatureFlow) {
-      // garante status operacional coerente (se ainda não assinou)
-      if (ownerFair.status !== OwnerFairStatus.AGUARDANDO_ASSINATURA) {
-        await this.prisma.ownerFair.update({
-          where: { id: ownerFair.id },
-          data: { status: OwnerFairStatus.AGUARDANDO_ASSINATURA },
-        });
-      }
-
-      return {
-        signUrl: contract.signUrl,
-        contractId: contract.id,
-        assinafyDocumentId: contract.assinafyDocumentId ?? '',
-        assinafySignerId: signerId,
-        reused: true,
-      };
-    }
 
     // 3) precisa ter pdfPath
     if (!contract.pdfPath) {
@@ -761,7 +744,7 @@ export class ContractsAssinafyService {
     }
 
     // 4) documentId (cria/reutiliza)
-    let documentId = shouldRegenerateSignatureFlow
+    let documentId = shouldRegenerateDocument
       ? null
       : contract.assinafyDocumentId;
     if (!documentId) {
@@ -827,4 +810,3 @@ export class ContractsAssinafyService {
     };
   }
 }
-
