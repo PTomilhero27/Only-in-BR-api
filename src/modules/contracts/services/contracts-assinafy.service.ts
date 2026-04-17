@@ -9,7 +9,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { CreateAssinafySignUrlDto } from '../dto/assinafy/create-sign-url.dto';
 import { CreateAssinafySignUrlResponseDto } from '../dto/assinafy/create-sign-url-response.dto';
-import { FairStatus, OwnerFairStatus } from '@prisma/client';
+import { FairStatus, OwnerFairStatus, UserRole } from '@prisma/client';
 
 /**
  * ContractsAssinafyService
@@ -350,6 +350,34 @@ export class ContractsAssinafyService {
     }
   }
 
+  private resolveOwnerSignerProfile(params: {
+    owner: {
+      email?: string | null;
+      fullName?: string | null;
+      users?: Array<{ email: string }>;
+    };
+    dto: Pick<CreateAssinafySignUrlDto, 'name' | 'email'>;
+  }) {
+    const email = this.normalizeEmail(
+      params.owner.email ?? params.owner.users?.[0]?.email ?? '',
+    );
+    const name = (params.owner.fullName ?? params.dto.name ?? '').trim();
+
+    if (!email) {
+      throw new BadRequestException(
+        'O expositor não possui e-mail cadastrado. Atualize o cadastro antes de enviar para assinatura.',
+      );
+    }
+
+    if (!name) {
+      throw new BadRequestException(
+        'O expositor não possui nome cadastrado. Atualize o cadastro antes de enviar para assinatura.',
+      );
+    }
+
+    return { name, email };
+  }
+
   private async persistSignerReference(params: {
     ownerId: string;
     contractId: string;
@@ -397,18 +425,17 @@ export class ContractsAssinafyService {
     name: string;
     email: string;
   }) {
-    const persistedSignerId = params.ownerSignerId ?? params.contractSignerId;
-
-    if (persistedSignerId) {
+    const signerIdByEmail = await this.assinafyTryFindSignerByEmail(params.email);
+    if (signerIdByEmail) {
       await this.persistSignerReference({
         ownerId: params.ownerId,
         contractId: params.contractId,
-        signerId: persistedSignerId,
+        signerId: signerIdByEmail,
         ownerSignerId: params.ownerSignerId,
         contractSignerId: params.contractSignerId,
       });
 
-      return persistedSignerId;
+      return signerIdByEmail;
     }
 
     const persistedSignerIdByEmail = await this.findPersistedSignerIdByEmail(
@@ -605,7 +632,14 @@ export class ContractsAssinafyService {
           select: {
             id: true,
             document: true,
+            fullName: true,
+            email: true,
             assinafySignerId: true,
+            users: {
+              where: { role: UserRole.EXHIBITOR },
+              select: { email: true },
+              take: 1,
+            },
           },
         },
         fair: {
@@ -660,15 +694,6 @@ export class ContractsAssinafyService {
     const knownSignerId =
       ownerFair.owner.assinafySignerId ?? contract.assinafySignerId ?? null;
 
-    if (knownSignerId) {
-      await this.persistSignerReference({
-        ownerId: ownerFair.owner.id,
-        contractId: contract.id,
-        signerId: knownSignerId,
-        ownerSignerId: ownerFair.owner.assinafySignerId,
-        contractSignerId: contract.assinafySignerId,
-      });
-    }
 
     /**
      * ✅ Caso já esteja assinado:
@@ -690,7 +715,27 @@ export class ContractsAssinafyService {
      * NÃO lançar erro. Apenas devolver o que já foi gerado.
      * Isso resolve: “criou mas o front não recebeu resposta”.
      */
-    if (contract.signUrl) {
+    const signerProfile = this.resolveOwnerSignerProfile({
+      owner: ownerFair.owner,
+      dto,
+    });
+
+    const signerId = await this.resolveSignerId({
+      ownerId: ownerFair.owner.id,
+      contractId: contract.id,
+      ownerSignerId: ownerFair.owner.assinafySignerId,
+      contractSignerId: contract.assinafySignerId,
+      name: signerProfile.name,
+      email: signerProfile.email,
+    });
+
+    const shouldRegenerateSignatureFlow = Boolean(
+      contract.signUrl &&
+        contract.assinafySignerId &&
+        contract.assinafySignerId !== signerId,
+    );
+
+    if (contract.signUrl && !shouldRegenerateSignatureFlow) {
       // garante status operacional coerente (se ainda não assinou)
       if (ownerFair.status !== OwnerFairStatus.AGUARDANDO_ASSINATURA) {
         await this.prisma.ownerFair.update({
@@ -703,7 +748,7 @@ export class ContractsAssinafyService {
         signUrl: contract.signUrl,
         contractId: contract.id,
         assinafyDocumentId: contract.assinafyDocumentId ?? '',
-        assinafySignerId: knownSignerId ?? '',
+        assinafySignerId: signerId,
         reused: true,
       };
     }
@@ -715,22 +760,14 @@ export class ContractsAssinafyService {
       );
     }
 
-    // 4) signer (cria/reutiliza)
-    const signerId = await this.resolveSignerId({
-      ownerId: ownerFair.owner.id,
-      contractId: contract.id,
-      ownerSignerId: ownerFair.owner.assinafySignerId,
-      contractSignerId: contract.assinafySignerId,
-      name: dto.name,
-      email: dto.email,
-    });
-
-    // 5) documentId (cria/reutiliza)
-    let documentId = contract.assinafyDocumentId;
+    // 4) documentId (cria/reutiliza)
+    let documentId = shouldRegenerateSignatureFlow
+      ? null
+      : contract.assinafyDocumentId;
     if (!documentId) {
       const pdfBuffer = await this.downloadPdfFromStorage(contract.pdfPath);
 
-      const safeName = this.normalizeKey(dto.name || 'Expositor');
+      const safeName = this.normalizeKey(signerProfile.name || 'Expositor');
       const safeBrand = this.normalizeKey(dto.brand || 'sem_marca');
       const ownerDoc = (ownerFair.owner.document || 'sem_doc').replace(
         /\D/g,
