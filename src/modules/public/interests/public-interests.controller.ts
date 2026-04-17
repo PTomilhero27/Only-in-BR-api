@@ -24,7 +24,8 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
  *
  * Decisão:
  * - Rotas públicas ficam sob /public para não misturar com rotas do painel (JWT).
- * - O cadastro cria Owner + User EXHIBITOR + envia código de verificação por email.
+ * - Sem senha, o cadastro cria apenas o Owner.
+ * - Com senha, o cadastro cria também User EXHIBITOR e envia código de verificação por email.
  */
 @ApiTags('Public - Interests')
 @Controller('public/interests')
@@ -34,9 +35,9 @@ export class PublicInterestsController {
   @Public()
   @Post('upsert')
   @ApiOperation({
-    summary: 'Cadastrar interessado (create-only + senha + código de verificação)',
+    summary: 'Cadastrar interessado (com ou sem senha)',
     description:
-      'Cria um Owner + User EXHIBITOR com senha. Envia código de 6 dígitos por email. ' +
+      'Sempre cria um Owner. Quando a senha é enviada, cria também User EXHIBITOR e envia código de 6 dígitos por email. ' +
       'Se já existir Owner com o mesmo CPF/CNPJ, retorna erro 400.',
   })
   @ApiOkResponse({ type: PublicOwnerResponseDto })

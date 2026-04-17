@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsEnum,
@@ -18,7 +18,9 @@ import { PersonType } from '@prisma/client';
  * - Mantemos validação mínima para UX e segurança.
  * - Document/phone devem chegar normalizados (somente dígitos) idealmente,
  *   mas ainda normalizamos no service por defesa.
- * - ✅ password é obrigatório para o fluxo self-service (cadastro + login).
+ * - ✅ password é opcional:
+ *   - com password => cria acesso ao portal no mesmo cadastro
+ *   - sem password => cria apenas o interesse inicial
  */
 export class UpsertPublicInterestDto {
   @ApiProperty({ enum: PersonType, example: 'PF' })
@@ -55,14 +57,15 @@ export class UpsertPublicInterestDto {
   @IsString({ message: 'phone deve ser um texto.' })
   phone: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Senha para login no portal.',
     example: '123456',
     minLength: 6,
   })
+  @IsOptional()
   @IsString({ message: 'password deve ser um texto.' })
   @MinLength(6, { message: 'A senha deve ter pelo menos 6 caracteres.' })
-  password: string;
+  password?: string;
 
   @ApiProperty({
     description: 'Descrição breve da operação.',

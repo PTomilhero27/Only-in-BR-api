@@ -20,16 +20,18 @@ import { createHash, randomInt } from 'crypto';
  * Service público do cadastro de interessados.
  *
  * Responsabilidade:
- * - Criar cadastro inicial (Owner) com dados básicos + User EXHIBITOR com senha.
- * - Gerar código de 6 dígitos e enviar por email para validação.
+ * - Criar cadastro inicial (Owner).
+ * - Opcionalmente criar User EXHIBITOR com senha.
+ * - Quando houver senha, gerar código de 6 dígitos e enviar por email para validação.
  * - Verificar o código e ativar a conta.
  * - Reenviar o código (rate-limit: 1 por minuto).
  *
  * Decisão:
  * - NÃO é upsert: se já existir Owner com o documento, retornamos erro (400).
- * - O User é criado com isActive=false até a verificação de email.
+ * - Sem password, mantemos o fluxo legado: cria apenas o interesse.
+ * - Com password, o User é criado com isActive=false até a verificação de email.
  * - Após verificar, Owner.emailVerifiedAt é marcado e User.isActive=true.
- * - O expositor pode logar imediatamente (sem aprovação do admin).
+ * - Quando há password, o expositor pode logar imediatamente após verificar o email.
  */
 @Injectable()
 export class PublicInterestsService {
@@ -49,6 +51,7 @@ export class PublicInterestsService {
     this.assertPersonTypeMatchesDocument(dto.personType, document);
 
     const email = dto.email.trim().toLowerCase();
+    const shouldCreatePortalAccess = dto.password !== undefined;
 
     // ✅ Regra: não permitir cadastrar novamente (document)
     const existsByDoc = await this.prisma.owner.findUnique({
@@ -62,22 +65,25 @@ export class PublicInterestsService {
       );
     }
 
-    // ✅ Regra: não permitir email duplicado no User
-    const existsByEmail = await this.prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    });
+    let passwordHash: string | null = null;
 
-    if (existsByEmail) {
-      throw new BadRequestException(
-        'Este e-mail já está em uso. Use outro e-mail ou recupere sua senha.',
-      );
+    if (shouldCreatePortalAccess) {
+      // ✅ Regra: não permitir email duplicado no User
+      const existsByEmail = await this.prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+
+      if (existsByEmail) {
+        throw new BadRequestException(
+          'Este e-mail já está em uso. Use outro e-mail ou recupere sua senha.',
+        );
+      }
+
+      passwordHash = await bcrypt.hash(dto.password!, 10);
     }
 
-    // ✅ Hash da senha
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-
-    // ✅ Transação: cria Owner + User + EmailVerificationToken
+    // ✅ Transação: cria Owner e, se houver senha, cria User + EmailVerificationToken
     const { owner, code } = await this.prisma.$transaction(async (tx) => {
       // 1) Cria Owner
       const newOwner = await tx.owner.create({
@@ -90,6 +96,10 @@ export class PublicInterestsService {
           stallsDescription: dto.stallsDescription?.trim() ?? null,
         },
       });
+
+      if (!shouldCreatePortalAccess || !passwordHash) {
+        return { owner: newOwner, code: null };
+      }
 
       // 2) Cria User EXHIBITOR (inativo até verificar email)
       const user = await tx.user.create({
@@ -119,6 +129,13 @@ export class PublicInterestsService {
 
       return { owner: newOwner, code: verificationCode };
     });
+
+    if (!code) {
+      return {
+        ownerId: owner.id,
+        message: 'Interesse cadastrado com sucesso.',
+      };
+    }
 
     // ✅ Enviar email com código (fora da transação para não bloquear)
     await this.sendVerificationEmail(email, dto.fullName ?? '', code);
