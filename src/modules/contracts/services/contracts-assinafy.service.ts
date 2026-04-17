@@ -147,6 +147,35 @@ export class ContractsAssinafyService {
     return found?.id ? String(found.id) : null;
   }
 
+  private findSignerIdInSinglePayloadByEmail(
+    payload: any,
+    email: string,
+  ): string | null {
+    const normalizedEmail = this.normalizeEmail(email);
+    const candidates = [payload, payload?.data, payload?.signer, payload?.result];
+
+    for (const candidate of candidates) {
+      if (!candidate || Array.isArray(candidate)) continue;
+
+      const signerId = candidate?.id ?? candidate?.signer?.id ?? null;
+      const signerEmail = this.normalizeEmail(
+        String(
+          candidate?.email ??
+            candidate?.mail ??
+            candidate?.signer?.email ??
+            candidate?.attributes?.email ??
+            '',
+        ),
+      );
+
+      if (signerId && signerEmail === normalizedEmail) {
+        return String(signerId);
+      }
+    }
+
+    return null;
+  }
+
   private getHttpErrorStatus(error: unknown): number | null {
     if (error instanceof HttpException) {
       return error.getStatus();
@@ -282,7 +311,10 @@ export class ContractsAssinafyService {
       );
       const signerId =
         this.findSignerIdInListByEmail(filteredData, normalizedEmail) ??
-        this.extractSignerIdFromPayload(filteredData);
+        this.findSignerIdInSinglePayloadByEmail(
+          filteredData,
+          normalizedEmail,
+        );
 
       if (signerId) {
         return signerId;
