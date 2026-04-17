@@ -306,18 +306,23 @@ export class ContractsAssinafyService {
     };
 
     try {
-      const filteredData = await fetchSigners(
+      const lookupUrls = [
         `${baseUrl}?email=${encodeURIComponent(normalizedEmail)}`,
-      );
-      const signerId =
-        this.findSignerIdInListByEmail(filteredData, normalizedEmail) ??
-        this.findSignerIdInSinglePayloadByEmail(
-          filteredData,
-          normalizedEmail,
-        );
+        `${baseUrl}?search=${encodeURIComponent(normalizedEmail)}`,
+      ];
 
-      if (signerId) {
-        return signerId;
+      for (const url of lookupUrls) {
+        const filteredData = await fetchSigners(url);
+        const signerId =
+          this.findSignerIdInListByEmail(filteredData, normalizedEmail) ??
+          this.findSignerIdInSinglePayloadByEmail(
+            filteredData,
+            normalizedEmail,
+          );
+
+        if (signerId) {
+          return signerId;
+        }
       }
     } catch (error) {
       const status = this.getHttpErrorStatus(error);
@@ -475,6 +480,21 @@ export class ContractsAssinafyService {
       });
 
       return signerIdByEmail;
+    }
+
+    const locallyKnownSignerId =
+      params.contractSignerId ?? params.ownerSignerId ?? null;
+
+    if (locallyKnownSignerId) {
+      await this.persistSignerReference({
+        ownerId: params.ownerId,
+        contractId: params.contractId,
+        signerId: locallyKnownSignerId,
+        ownerSignerId: params.ownerSignerId,
+        contractSignerId: params.contractSignerId,
+      });
+
+      return locallyKnownSignerId;
     }
 
     const persistedSignerIdByEmail = await this.findPersistedSignerIdByEmail(

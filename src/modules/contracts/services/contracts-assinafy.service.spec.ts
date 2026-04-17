@@ -38,6 +38,13 @@ describe('ContractsAssinafyService', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            data: [{ id: 'search-other-id', email: 'other@example.com' }],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
             data: [
               { id: 'correct-signer-id', email: 'target@example.com' },
               { id: 'other-signer-id', email: 'other@example.com' },
@@ -59,10 +66,56 @@ describe('ContractsAssinafyService', () => {
     );
     expect(global.fetch).toHaveBeenNthCalledWith(
       2,
+      'https://assinafy.example.com/accounts/account-123/signers?search=target%40example.com',
+      expect.objectContaining({
+        method: 'GET',
+      }),
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      3,
       'https://assinafy.example.com/accounts/account-123/signers',
       expect.objectContaining({
         method: 'GET',
       }),
     );
+  });
+
+  it('reuses the current owner signer id before trying to create a new signer', async () => {
+    const prisma = {
+      owner: {
+        findFirst: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      contract: {
+        update: jest.fn().mockResolvedValue({}),
+      },
+      $transaction: jest.fn().mockResolvedValue([]),
+    };
+
+    const service = new ContractsAssinafyService(prisma as never);
+
+    jest
+      .spyOn(service as any, 'assinafyTryFindSignerByEmail')
+      .mockResolvedValue(null);
+    jest
+      .spyOn(service as any, 'assinafyGetOrCreateSigner')
+      .mockResolvedValue({ signerId: 'new-signer-id', created: true });
+
+    const result = await (service as any).resolveSignerId({
+      ownerId: 'owner-1',
+      contractId: 'contract-1',
+      ownerSignerId: 'known-owner-signer-id',
+      contractSignerId: null,
+      name: 'Maria',
+      email: 'maria@example.com',
+    });
+
+    expect(result).toBe('known-owner-signer-id');
+    expect((service as any).assinafyGetOrCreateSigner).not.toHaveBeenCalled();
+    expect(prisma.owner.update).not.toHaveBeenCalled();
+    expect(prisma.contract.update).toHaveBeenCalledWith({
+      where: { id: 'contract-1' },
+      data: { assinafySignerId: 'known-owner-signer-id' },
+    });
   });
 });
