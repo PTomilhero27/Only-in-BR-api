@@ -1142,6 +1142,7 @@ export class FairsService {
         contractSignedAt: of.contractSignedAt
           ? of.contractSignedAt.toISOString()
           : null,
+        contractSigned: Boolean(of.contractSignedAt),
 
         observations: of.observations ?? null,
         payment: aggregatedPayment,
