@@ -41,6 +41,7 @@ prisma/*.d.ts
 /backups/
 *.dump
 *.sql
+!prisma/migrations/20260429120000_add_pix_remittances_and_exhibitor_payouts/migration.sql
 
 # IDE - VSCode
 .vscode/*

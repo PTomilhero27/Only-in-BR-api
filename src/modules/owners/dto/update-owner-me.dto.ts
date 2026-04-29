@@ -18,7 +18,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { BankAccountType } from '@prisma/client';
+import { BankAccountType, PixKeyType } from '@prisma/client';
 
 export class UpdateOwnerMeDto {
   // -----------------------
@@ -117,6 +117,15 @@ export class UpdateOwnerMeDto {
   @IsString({ message: 'pixKey deve ser string.' })
   @Length(2, 200, { message: 'pixKey deve ter entre 2 e 200 caracteres.' })
   pixKey?: string | null;
+
+  @ApiPropertyOptional({
+    enum: PixKeyType,
+    nullable: true,
+    description: 'Tipo da chave Pix usado em remessas PIX da feira.',
+  })
+  @IsOptional()
+  @IsEnum(PixKeyType, { message: 'pixKeyType invalido.' })
+  pixKeyType?: PixKeyType | null;
 
   @ApiPropertyOptional({
     enum: BankAccountType,

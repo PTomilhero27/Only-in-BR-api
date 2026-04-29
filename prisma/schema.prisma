@@ -48,6 +48,14 @@ enum BankAccountType {
   PAGAMENTO
 }
 
+enum PixKeyType {
+  CPF
+  CNPJ
+  EMAIL
+  PHONE
+  RANDOM
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -64,6 +72,9 @@ enum AuditEntity {
   OWNER_FAIR_PURCHASE
   OWNER_FAIR_PURCHASE_PAYMENT
   OWNER_FAIR_PURCHASE_ADJUSTMENT
+  FAIR_SUPPLIER
+  PIX_REMITTANCE
+  EXHIBITOR_PAYOUT
 }
 
 enum AdjustmentType {
@@ -103,6 +114,44 @@ enum OwnerFairPaymentStatus {
   PAID
   OVERDUE
   CANCELLED
+}
+
+enum FairSupplierInstallmentStatus {
+  PENDING
+  INCLUDED_IN_REMITTANCE
+  PAID
+  CANCELLED
+}
+
+enum FairSupplierStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum PixRemittanceStatus {
+  GENERATED
+  PAID
+  CANCELLED
+}
+
+enum PixRemittancePayeeType {
+  SUPPLIER
+  EXHIBITOR
+}
+
+enum ExhibitorPayoutStatus {
+  PENDING
+  INCLUDED_IN_REMITTANCE
+  PAID
+  CANCELLED
+}
+
+enum ExhibitorPayoutSource {
+  MANUAL
+  IMPORTED
+  CALCULATED
 }
 
 enum MarketplaceSlotStatus {
@@ -245,6 +294,9 @@ model User {
   fairsCreated             Fair[]             @relation("FairsCreated")
   auditLogs                AuditLog[]         @relation("UserAuditLogs")
   documentTemplatesCreated DocumentTemplate[] @relation("DocumentTemplatesCreatedBy")
+  fairSuppliersCreated     FairSupplier[]     @relation("FairSuppliersCreatedBy")
+  pixRemittancesCreated    PixRemittance[]    @relation("PixRemittancesCreatedBy")
+  exhibitorPayoutsCreated  ExhibitorPayout[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -345,7 +397,9 @@ model Fair {
   /**
    * Vínculos desta feira com expositores (Owner).
    */
-  ownerFairs OwnerFair[]
+  ownerFairs     OwnerFair[]
+  fairSuppliers  FairSupplier[]
+  pixRemittances PixRemittance[]
 
   /**
    * Barracas vinculadas a esta feira.
@@ -502,6 +556,7 @@ model Owner {
   addressNumber  String?
 
   pixKey          String?
+  pixKeyType      PixKeyType?
   bankName        String?
   bankAgency      String?
   bankAccount     String?
@@ -600,6 +655,7 @@ model OwnerFair {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   ownerFairPurchases OwnerFairPurchase[]
+  exhibitorPayout    ExhibitorPayout?
 
   @@unique([ownerId, fairId])
   @@index([ownerId])
@@ -956,6 +1012,201 @@ model OwnerFairPurchaseInstallmentPayment {
   @@index([installmentId])
   @@index([paidAt])
   @@index([createdByUserId])
+}
+
+// =====================
+// PAGAMENTOS PIX DA FEIRA
+// =====================
+
+model FairSupplier {
+  id String @id @default(cuid())
+
+  /**
+   * Fornecedor/prestador cadastrado no contexto de uma feira.
+   */
+  fairId String
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  name     String
+  document String
+  email    String?
+  phone    String?
+
+  pixKeyType PixKeyType
+  pixKey     String
+
+  description String?
+
+  totalAmountCents   Int                @default(0)
+  paidAmountCents    Int                @default(0)
+  pendingAmountCents Int                @default(0)
+  status             FairSupplierStatus @default(PENDING)
+
+  createdByUserId String?
+  createdBy       User?   @relation("FairSuppliersCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  installments FairSupplierInstallment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fairId])
+  @@index([document])
+  @@index([status])
+}
+
+model FairSupplierInstallment {
+  id String @id @default(cuid())
+
+  supplierId String
+  supplier   FairSupplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  number      Int
+  description String?
+  dueDate     DateTime?
+  amountCents Int
+
+  paidAmountCents Int                           @default(0)
+  paidAt          DateTime?
+  status          FairSupplierInstallmentStatus @default(PENDING)
+
+  pixRemittanceItem PixRemittanceItem?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([supplierId, number])
+  @@index([supplierId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model ExhibitorPayout {
+  id String @id @default(cuid())
+
+  /**
+   * Vinculo do expositor com a feira. Expositor continua sendo Owner/OwnerFair.
+   */
+  ownerFairId String
+  ownerFair   OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
+
+  /**
+   * Valor bruto apurado para o expositor na feira.
+   */
+  grossAmountCents Int
+
+  /**
+   * Descontos antes do repasse.
+   */
+  discountAmountCents Int @default(0)
+
+  /**
+   * Valor liquido: grossAmountCents - discountAmountCents + adjustmentAmountCents.
+   */
+  netAmountCents Int
+
+  /**
+   * Ajuste manual opcional, positivo ou negativo.
+   */
+  adjustmentAmountCents Int @default(0)
+
+  /**
+   * Valor ja pago ao expositor.
+   */
+  paidAmountCents Int @default(0)
+
+  dueDate DateTime?
+  paidAt  DateTime?
+
+  status ExhibitorPayoutStatus @default(PENDING)
+  source ExhibitorPayoutSource @default(MANUAL)
+
+  notes String?
+
+  pixRemittanceItem PixRemittanceItem?
+
+  createdByUserId String?
+  createdBy       User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerFairId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model PixRemittance {
+  id String @id @default(cuid())
+
+  /**
+   * Feira dona da remessa PIX.
+   */
+  fairId String
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  paymentDate DateTime
+  description String?
+
+  status PixRemittanceStatus @default(GENERATED)
+
+  fileName    String?
+  fileContent String?
+
+  totalItems       Int @default(0)
+  totalAmountCents Int @default(0)
+
+  paidAt      DateTime?
+  cancelledAt DateTime?
+
+  createdByUserId String?
+  createdBy       User?   @relation("PixRemittancesCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  items PixRemittanceItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fairId])
+  @@index([status])
+  @@index([paymentDate])
+}
+
+model PixRemittanceItem {
+  id String @id @default(cuid())
+
+  pixRemittanceId String
+  pixRemittance   PixRemittance @relation(fields: [pixRemittanceId], references: [id], onDelete: Cascade)
+
+  /**
+   * SUPPLIER = fornecedor/prestador. EXHIBITOR = expositor da feira.
+   */
+  payeeType PixRemittancePayeeType
+
+  supplierInstallmentId String?                  @unique
+  supplierInstallment   FairSupplierInstallment? @relation(fields: [supplierInstallmentId], references: [id], onDelete: Restrict)
+
+  exhibitorPayoutId String?          @unique
+  exhibitorPayout   ExhibitorPayout? @relation(fields: [exhibitorPayoutId], references: [id], onDelete: Restrict)
+
+  amountCents Int
+
+  /**
+   * Snapshot do favorecido usado para manter historico da remessa.
+   */
+  payeeName     String
+  payeeDocument String
+  pixKeyType    PixKeyType
+  pixKey        String
+
+  txId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([pixRemittanceId])
+  @@index([payeeType])
+  @@index([supplierInstallmentId])
+  @@index([exhibitorPayoutId])
 }
 
 // =====================

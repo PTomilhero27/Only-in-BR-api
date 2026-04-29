@@ -29,6 +29,9 @@ import { MailModule } from './modules/mail/mail.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { PublicMarketplaceModule } from './modules/public/marketplace/public-marketplace.module';
 import { FairShowcaseModule } from './modules/fair-showcase/fair-showcase.module';
+import { ExhibitorPayoutsModule } from './modules/exhibitor-payouts/exhibitor-payouts.module';
+import { FairSuppliersModule } from './modules/fair-suppliers/fair-suppliers.module';
+import { PixRemittancesModule } from './modules/pix-remittances/pix-remittances.module';
 
 @Global()
 @Module({
@@ -59,6 +62,9 @@ import { FairShowcaseModule } from './modules/fair-showcase/fair-showcase.module
     MarketplaceModule,
     PublicMarketplaceModule,
     FairShowcaseModule,
+    ExhibitorPayoutsModule,
+    FairSuppliersModule,
+    PixRemittancesModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],

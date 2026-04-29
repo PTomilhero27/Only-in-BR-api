@@ -10,7 +10,7 @@
  *   e o service faz o mapeamento para o schema real do Prisma (fullName, addressZipcode...).
  */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BankAccountType, PersonType } from '@prisma/client';
+import { BankAccountType, PersonType, PixKeyType } from '@prisma/client';
 
 export class OwnerMeResponseDto {
   @ApiProperty({ example: 'cku2m9b2f0001u8x9a1b2c3d4' })
@@ -113,6 +113,13 @@ export class OwnerMeResponseDto {
       'Chave Pix (pode ser CPF/CNPJ, e-mail, telefone ou aleatória).',
   })
   pixKey: string | null;
+
+  @ApiPropertyOptional({
+    enum: PixKeyType,
+    nullable: true,
+    description: 'Tipo da chave Pix usado em remessas PIX da feira.',
+  })
+  pixKeyType: PixKeyType | null;
 
   @ApiPropertyOptional({
     enum: BankAccountType,

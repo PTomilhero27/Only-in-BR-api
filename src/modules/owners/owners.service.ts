@@ -53,6 +53,7 @@ export class OwnersService {
 
         // Financeiro (schema Prisma atual)
         pixKey: true,
+        pixKeyType: true,
         bankAccountType: true,
         bankName: true,
         bankAgency: true,
@@ -120,6 +121,7 @@ export class OwnersService {
         // Financeiro (schema Prisma atual)
         // -----------------------
         pixKey: dto.pixKey ?? null,
+        pixKeyType: dto.pixKeyType ?? null,
         bankAccountType: dto.bankAccountType ?? null,
         bankName: dto.bankName ?? null,
         bankAgency: dto.bankAgency ?? null,
@@ -143,6 +145,7 @@ export class OwnersService {
         addressNumber: true,
 
         pixKey: true,
+        pixKeyType: true,
         bankAccountType: true,
         bankName: true,
         bankAgency: true,
@@ -211,6 +214,7 @@ export class OwnersService {
 
       // Financeiro
       pixKey: owner.pixKey ?? null,
+      pixKeyType: owner.pixKeyType ?? null,
       bankAccountType: owner.bankAccountType ?? null,
       bankName: owner.bankName ?? null,
       bankAgency: owner.bankAgency ?? null,
