@@ -1,60 +1,47 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PixRemittancePayeeType } from '@prisma/client';
+import { PixRemittanceGenerationMode } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsDateString,
   IsEnum,
   IsOptional,
   IsString,
   ValidateNested,
 } from 'class-validator';
-
-/**
- * Item solicitado para geracao de remessa.
- * SUPPLIER exige supplierInstallmentId; EXHIBITOR exige exhibitorPayoutId.
- */
-export class CreatePixRemittanceItemDto {
-  @ApiProperty({ enum: PixRemittancePayeeType })
-  @IsEnum(PixRemittancePayeeType)
-  payeeType!: PixRemittancePayeeType;
-
-  @ApiPropertyOptional({
-    description: 'Parcela de fornecedor quando payeeType=SUPPLIER.',
-  })
-  @IsOptional()
-  @IsString()
-  supplierInstallmentId?: string;
-
-  @ApiPropertyOptional({
-    description: 'Repasse de expositor quando payeeType=EXHIBITOR.',
-  })
-  @IsOptional()
-  @IsString()
-  exhibitorPayoutId?: string;
-}
+import { CreatePixRemittanceItemDto } from './create-pix-remittance-item.dto';
 
 /**
  * DTO para criar remessa PIX da feira.
- * A lista de itens pode misturar fornecedores/prestadores e expositores.
+ * Permite selecionar modo SINGLE ou SPLIT_TWO para gerar ate dois arquivos distintos no mesmo processo.
  */
 export class CreatePixRemittanceDto {
   @ApiProperty({
-    description: 'Data de pagamento informada no arquivo.',
+    enum: PixRemittanceGenerationMode,
+    description: 'Modo de geracao. SINGLE para 1 arquivo. SPLIT_TWO para dividir em 2 arquivos.',
+    example: 'SINGLE'
+  })
+  @IsEnum(PixRemittanceGenerationMode)
+  mode!: PixRemittanceGenerationMode;
+
+  @ApiPropertyOptional({
+    description: 'Data de pagamento informada no arquivo. Opcional, se nao enviar pode ser a data de execucao ou vencimentos.',
     example: '2026-05-20T00:00:00.000Z',
   })
-  @IsString()
-  paymentDate!: string;
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
 
   @ApiPropertyOptional({
     description: 'Descricao administrativa da remessa.',
-    example: 'Pagamento pos-evento de expositores e fornecedores',
+    example: 'Pagamento pos-evento de fornecedores',
   })
   @IsOptional()
   @IsString()
   description?: string;
 
-  @ApiProperty({ type: [CreatePixRemittanceItemDto] })
+  @ApiProperty({ type: [CreatePixRemittanceItemDto], description: 'Itens (parcelas) a serem incluidos na remessa.' })
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

@@ -20,9 +20,12 @@ import {
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtPayload } from 'src/common/types/jwt-payload.type';
 import { CreateExhibitorPayoutDto } from './dto/create-exhibitor-payout.dto';
+import { UpdateExhibitorPayoutImportConfigDto } from './dto/exhibitor-payout-import-config.dto';
+import { ExhibitorPayoutImportPreviewResponseDto } from './dto/exhibitor-payout-import-preview.dto';
 import { ExhibitorPayoutResponseDto } from './dto/exhibitor-payout-response.dto';
 import { ListExhibitorPayoutsDto } from './dto/list-exhibitor-payouts.dto';
 import { UpdateExhibitorPayoutDto } from './dto/update-exhibitor-payout.dto';
+import { ExhibitorPayoutsImportService } from './exhibitor-payouts-import.service';
 import { ExhibitorPayoutsService } from './exhibitor-payouts.service';
 
 /**
@@ -33,7 +36,51 @@ import { ExhibitorPayoutsService } from './exhibitor-payouts.service';
 @ApiBearerAuth()
 @Controller('fairs/:fairId/exhibitor-payouts')
 export class ExhibitorPayoutsController {
-  constructor(private readonly service: ExhibitorPayoutsService) {}
+  constructor(
+    private readonly service: ExhibitorPayoutsService,
+    private readonly importService: ExhibitorPayoutsImportService,
+  ) {}
+
+  @Get('import-config')
+  @ApiOperation({
+    summary: 'Obter configuracao da importacao de repasses de expositores.',
+  })
+  getImportConfig(@Param('fairId') fairId: string) {
+    return this.importService.getConfig(fairId);
+  }
+
+  @Patch('import-config')
+  @ApiOperation({
+    summary: 'Atualizar configuracao da importacao de repasses de expositores.',
+  })
+  updateImportConfig(
+    @Param('fairId') fairId: string,
+    @Body() dto: UpdateExhibitorPayoutImportConfigDto,
+  ) {
+    return this.importService.updateConfig(fairId, dto);
+  }
+
+  @Post('import/preview')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Gerar previa da importacao de repasses de expositores.',
+  })
+  @ApiOkResponse({ type: ExhibitorPayoutImportPreviewResponseDto })
+  previewImport(@Param('fairId') fairId: string) {
+    return this.importService.preview(fairId);
+  }
+
+  @Post('import/confirm')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Confirmar importacao de repasses de expositores.',
+  })
+  confirmImport(
+    @Param('fairId') fairId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.importService.confirm(fairId, user.id);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Listar expositores da feira com seus repasses.' })

@@ -141,6 +141,11 @@ enum PixRemittancePayeeType {
   EXHIBITOR
 }
 
+enum PixRemittanceGenerationMode {
+  SINGLE
+  SPLIT_TWO
+}
+
 enum ExhibitorPayoutStatus {
   PENDING
   INCLUDED_IN_REMITTANCE
@@ -397,10 +402,11 @@ model Fair {
   /**
    * Vínculos desta feira com expositores (Owner).
    */
-  ownerFairs     OwnerFair[]
-  fairSuppliers  FairSupplier[]
-  pixRemittances PixRemittance[]
-  supplierImportConfig FairSupplierImportConfig?
+  ownerFairs                  OwnerFair[]
+  fairSuppliers               FairSupplier[]
+  pixRemittances              PixRemittance[]
+  supplierImportConfig        FairSupplierImportConfig?
+  exhibitorPayoutImportConfig ExhibitorPayoutImportConfig?
 
   /**
    * Barracas vinculadas a esta feira.
@@ -1035,6 +1041,22 @@ model FairSupplierImportConfig {
   updatedAt DateTime @updatedAt
 }
 
+model ExhibitorPayoutImportConfig {
+  id String @id @default(cuid())
+
+  fairId String @unique
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  spreadsheetId String
+  sheetName     String
+
+  headerRow    Int @default(3)
+  dataStartRow Int @default(4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // =====================
 // PAGAMENTOS PIX DA FEIRA
 // =====================
@@ -1094,7 +1116,7 @@ model FairSupplierInstallment {
   paidAt          DateTime?
   status          FairSupplierInstallmentStatus @default(PENDING)
 
-  pixRemittanceItem PixRemittanceItem?
+  pixRemittanceItems PixRemittanceItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1147,7 +1169,7 @@ model ExhibitorPayout {
 
   notes String?
 
-  pixRemittanceItem PixRemittanceItem?
+  pixRemittanceItems PixRemittanceItem[]
 
   createdByUserId String?
   createdBy       User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -1174,8 +1196,19 @@ model PixRemittance {
 
   status PixRemittanceStatus @default(GENERATED)
 
+  /**
+   * Modo usado na geração.
+   */
+  generationMode PixRemittanceGenerationMode?
+
+  /**
+   * Grupo/lote quando a geração foi dividida.
+   */
+  groupNumber Int?
+
   fileName    String?
   fileContent String?
+  filePath    String?
 
   totalItems       Int @default(0)
   totalAmountCents Int @default(0)
@@ -1207,10 +1240,10 @@ model PixRemittanceItem {
    */
   payeeType PixRemittancePayeeType
 
-  supplierInstallmentId String?                  @unique
+  supplierInstallmentId String?
   supplierInstallment   FairSupplierInstallment? @relation(fields: [supplierInstallmentId], references: [id], onDelete: Restrict)
 
-  exhibitorPayoutId String?          @unique
+  exhibitorPayoutId String?
   exhibitorPayout   ExhibitorPayout? @relation(fields: [exhibitorPayoutId], references: [id], onDelete: Restrict)
 
   amountCents Int
