@@ -400,6 +400,7 @@ model Fair {
   ownerFairs     OwnerFair[]
   fairSuppliers  FairSupplier[]
   pixRemittances PixRemittance[]
+  supplierImportConfig FairSupplierImportConfig?
 
   /**
    * Barracas vinculadas a esta feira.
@@ -1015,6 +1016,26 @@ model OwnerFairPurchaseInstallmentPayment {
 }
 
 // =====================
+// IMPORTAÇÃO DE FORNECEDORES (PLANILHA)
+// =====================
+
+model FairSupplierImportConfig {
+  id String @id @default(cuid())
+
+  fairId String @unique
+  fair   Fair   @relation(fields: [fairId], references: [id], onDelete: Cascade)
+
+  spreadsheetId String
+  sheetName     String
+
+  headerRow    Int @default(2)
+  dataStartRow Int @default(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =====================
 // PAGAMENTOS PIX DA FEIRA
 // =====================
 
@@ -1031,6 +1052,9 @@ model FairSupplier {
   document String
   email    String?
   phone    String?
+
+  holderName     String?
+  holderDocument String?
 
   pixKeyType PixKeyType
   pixKey     String

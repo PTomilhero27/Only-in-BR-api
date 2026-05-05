@@ -45,6 +45,18 @@ export class CreateFairSupplierDto {
   @MaxLength(32)
   phone?: string | null;
 
+  @ApiPropertyOptional({ nullable: true, description: 'Nome do titular da conta para o PIX.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  holderName?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, description: 'CPF ou CNPJ do titular da conta.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  holderDocument?: string | null;
+
   @ApiProperty({
     enum: PixKeyType,
     description: 'Tipo da chave PIX usada na remessa.',
