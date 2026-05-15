@@ -258,7 +258,7 @@ export class MarketplaceReservationConfirmationService {
       where: { id: ownerFairId },
       include: {
         stallFairs: true,
-        contract: true,
+        contracts: { orderBy: { updatedAt: 'desc' }, take: 1 },
         ownerFairPurchases: {
           include: { installments: true },
         },
@@ -290,7 +290,7 @@ export class MarketplaceReservationConfirmationService {
 
     const isFullyPaid = remainingCents === 0;
     const isSigned = Boolean(
-      ownerFair.contractSignedAt || ownerFair.contract?.signedAt,
+      ownerFair.contractSignedAt || ownerFair.contracts?.[0]?.signedAt,
     );
     const hasPurchases = purchasedQty > 0;
     const stallsAreComplete = hasPurchases && linkedQty >= purchasedQty;

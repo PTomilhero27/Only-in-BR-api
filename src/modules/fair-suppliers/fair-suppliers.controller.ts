@@ -46,19 +46,26 @@ export class FairSuppliersController {
   }
 
   @Get('import/test-metadata')
-  @ApiOperation({ summary: 'Testar acesso à planilha e retornar metadados (abas disponíveis).' })
+  @ApiOperation({
+    summary:
+      'Testar acesso à planilha e retornar metadados (abas disponíveis).',
+  })
   testSpreadsheetMetadata(@Param('fairId') fairId: string) {
     return this.importService.getSpreadsheetMetadata(fairId);
   }
 
   @Get('import/test-values')
-  @ApiOperation({ summary: 'Testar leitura de valores na planilha (values.get).' })
+  @ApiOperation({
+    summary: 'Testar leitura de valores na planilha (values.get).',
+  })
   testSpreadsheetValues(@Param('fairId') fairId: string) {
     return this.importService.testValues(fairId);
   }
 
   @Patch('import-config')
-  @ApiOperation({ summary: 'Atualizar configuração de importação da planilha.' })
+  @ApiOperation({
+    summary: 'Atualizar configuração de importação da planilha.',
+  })
   updateImportConfig(
     @Param('fairId') fairId: string,
     @Body() dto: UpdateFairSupplierImportConfigDto,
@@ -76,7 +83,9 @@ export class FairSuppliersController {
 
   @Post('import/confirm')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Confirmar importação de fornecedores da planilha.' })
+  @ApiOperation({
+    summary: 'Confirmar importação de fornecedores da planilha.',
+  })
   confirmImport(
     @Param('fairId') fairId: string,
     @CurrentUser() user: JwtPayload,
@@ -101,6 +110,17 @@ export class FairSuppliersController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.service.create(fairId, dto, user.id);
+  }
+
+  @Delete()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Excluir todos os fornecedores/prestadores da feira.',
+    description:
+      'Remove todos os fornecedores e parcelas, inclusive itens ja vinculados a remessas.',
+  })
+  deleteAll(@Param('fairId') fairId: string, @CurrentUser() user: JwtPayload) {
+    return this.service.deleteAll(fairId, user.id);
   }
 
   @Patch(':supplierId')

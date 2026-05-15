@@ -85,19 +85,24 @@ export class FairPayeesService {
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
     });
 
-    return installments.map((installment) => ({
-      payeeType: PixRemittancePayeeType.SUPPLIER,
-      id: installment.id,
-      name: installment.supplier.name,
-      document: installment.supplier.document,
-      description:
-        installment.description ??
-        `Parcela ${installment.number} - ${installment.supplier.name}`,
-      amountCents: installment.amountCents,
-      dueDate: installment.dueDate,
-      pixKeyType: installment.supplier.pixKeyType,
-      pixKey: installment.supplier.pixKey,
-    }));
+    return installments.map((installment) => {
+      const supplier = installment.supplier;
+      const name = supplier.holderName ?? supplier.name;
+
+      return {
+        payeeType: PixRemittancePayeeType.SUPPLIER,
+        id: installment.id,
+        name,
+        document: supplier.holderDocument ?? supplier.document,
+        description:
+          installment.description ??
+          `Parcela ${installment.number} - ${supplier.name}`,
+        amountCents: installment.amountCents,
+        dueDate: installment.dueDate,
+        pixKeyType: supplier.pixKeyType,
+        pixKey: supplier.pixKey,
+      };
+    });
   }
 
   private async listExhibitorItems(

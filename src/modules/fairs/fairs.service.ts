@@ -974,12 +974,15 @@ export class FairsService {
           },
         },
 
-        // ✅ Contrato (instância por expositor)
-        contract: {
+        // ✅ Contratos (instâncias por expositor — pode haver mais de 1 tipo)
+        contracts: {
+          orderBy: { updatedAt: 'desc' },
           select: {
             id: true,
             templateId: true,
             addendumTemplateId: true,
+            type: true,
+            title: true,
             pdfPath: true,
             assinafyDocumentId: true,
             signUrl: true,
@@ -1070,6 +1073,12 @@ export class FairsService {
         ? of.contractSignedAt.toISOString()
         : null;
 
+      // Contrato efetivo: específico > multi-feira > padrão
+      const effectiveContract = of.contracts?.find(c => c.type === 'EXHIBITOR_SPECIFIC')
+        ?? of.contracts?.find(c => c.type === 'MULTI_FAIR')
+        ?? of.contracts?.[0]
+        ?? null;
+
       /**
        * Regra do link de assinatura:
        * - se já assinou, não retornamos link
@@ -1078,10 +1087,10 @@ export class FairsService {
        */
       const signUrl = signedAt
         ? null
-        : of.contract?.signUrl
-          ? of.contract.signUrl
-          : of.contract?.assinafyDocumentId
-            ? `https://app.assinafy.com.br/sign/${of.contract.assinafyDocumentId}`
+        : effectiveContract?.signUrl
+          ? effectiveContract.signUrl
+          : effectiveContract?.assinafyDocumentId
+            ? `https://app.assinafy.com.br/sign/${effectiveContract.assinafyDocumentId}`
             : null;
 
       const contractSummary = {
@@ -1095,18 +1104,31 @@ export class FairsService {
             }
           : null,
 
-        // Instância do contrato do expositor (pode existir mesmo antes da assinatura)
-        instance: of.contract
+        // Instância do contrato efetivo do expositor
+        instance: effectiveContract
           ? {
-              id: of.contract.id,
-              templateId: of.contract.templateId,
-              addendumTemplateId: of.contract.addendumTemplateId ?? null,
-              pdfPath: of.contract.pdfPath ?? null,
-              assinafyDocumentId: of.contract.assinafyDocumentId ?? null,
-              createdAt: of.contract.createdAt.toISOString(),
-              updatedAt: of.contract.updatedAt.toISOString(),
+              id: effectiveContract.id,
+              templateId: effectiveContract.templateId,
+              addendumTemplateId: effectiveContract.addendumTemplateId ?? null,
+              type: effectiveContract.type,
+              title: effectiveContract.title ?? null,
+              pdfPath: effectiveContract.pdfPath ?? null,
+              assinafyDocumentId: effectiveContract.assinafyDocumentId ?? null,
+              createdAt: effectiveContract.createdAt.toISOString(),
+              updatedAt: effectiveContract.updatedAt.toISOString(),
             }
           : null,
+
+        // Todos os contratos do expositor nesta feira
+        allContracts: (of.contracts ?? []).map(c => ({
+          id: c.id,
+          type: c.type,
+          title: c.title ?? null,
+          templateId: c.templateId,
+          pdfPath: c.pdfPath ?? null,
+          signedAt: c.signedAt?.toISOString() ?? null,
+          createdAt: c.createdAt.toISOString(),
+        })),
 
         // Aditivo escolhido no vínculo expositor↔feira (opcional)
         addendumChoice: of.addendum
@@ -1123,8 +1145,8 @@ export class FairsService {
 
         signedAt,
         signUrl,
-        hasPdf: Boolean(of.contract?.pdfPath),
-        hasContractInstance: Boolean(of.contract?.id),
+        hasPdf: Boolean(effectiveContract?.pdfPath),
+        hasContractInstance: Boolean(effectiveContract?.id),
       };
 
       return {
@@ -1278,7 +1300,7 @@ export class FairsService {
         where: { ownerId_fairId: { ownerId, fairId } },
         include: {
           stallFairs: true,
-          contract: true,
+          contracts: { orderBy: { updatedAt: 'desc' }, take: 1 },
           ownerFairPurchases: {
             include: { installments: true },
           },
@@ -1323,7 +1345,7 @@ export class FairsService {
 
       const isFullyPaid = remainingCents === 0 && openInstallmentsCount === 0;
       const isSigned = Boolean(
-        before.contractSignedAt || before.contract?.signedAt,
+      before.contractSignedAt || before.contracts?.[0]?.signedAt,
       );
 
       const hasPurchases = purchasedQty > 0;
@@ -1542,7 +1564,7 @@ export class FairsService {
       where: { id: ownerFairId },
       include: {
         stallFairs: true,
-        contract: true,
+        contracts: { orderBy: { updatedAt: 'desc' }, take: 1 },
         ownerFairPurchases: {
           include: { installments: true },
         },
@@ -1571,7 +1593,7 @@ export class FairsService {
 
     const isFullyPaid = remainingCents === 0;
     const isSigned = Boolean(
-      ownerFair.contractSignedAt || ownerFair.contract?.signedAt,
+      ownerFair.contractSignedAt || ownerFair.contracts?.[0]?.signedAt,
     );
 
     const hasPurchases = purchasedQty > 0;

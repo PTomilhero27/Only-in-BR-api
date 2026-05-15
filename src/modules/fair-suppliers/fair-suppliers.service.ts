@@ -56,6 +56,10 @@ export class FairSuppliersService {
           document: this.onlyDigits(dto.document),
           email: dto.email ?? null,
           phone: dto.phone ?? null,
+          holderName: dto.holderName ?? null,
+          holderDocument: dto.holderDocument
+            ? this.onlyDigits(dto.holderDocument)
+            : null,
           pixKeyType: dto.pixKeyType,
           pixKey: dto.pixKey,
           description: dto.description ?? null,
@@ -134,6 +138,14 @@ export class FairSuppliersService {
           document: dto.document ? this.onlyDigits(dto.document) : undefined,
           email: dto.email !== undefined ? (dto.email ?? null) : undefined,
           phone: dto.phone !== undefined ? (dto.phone ?? null) : undefined,
+          holderName:
+            dto.holderName !== undefined ? (dto.holderName ?? null) : undefined,
+          holderDocument:
+            dto.holderDocument !== undefined
+              ? dto.holderDocument
+                ? this.onlyDigits(dto.holderDocument)
+                : null
+              : undefined,
           pixKeyType: dto.pixKeyType,
           pixKey: dto.pixKey,
           description:
@@ -202,6 +214,118 @@ export class FairSuppliersService {
     });
 
     return { id: supplierId, status: 'DELETED' };
+  }
+
+  async deleteAll(fairId: string, actorUserId: string) {
+    await this.requireFair(fairId);
+
+    const suppliers = await this.prisma.fairSupplier.findMany({
+      where: { fairId },
+      include: { installments: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!suppliers.length) {
+      return {
+        status: 'NO_SUPPLIERS',
+        deletedSuppliers: 0,
+        deletedInstallments: 0,
+      };
+    }
+
+    const supplierIds = suppliers.map((supplier) => supplier.id);
+    const installmentIds = suppliers.flatMap((supplier) =>
+      supplier.installments.map((installment) => installment.id),
+    );
+    const deletedInstallments = suppliers.reduce(
+      (sum, supplier) => sum + supplier.installments.length,
+      0,
+    );
+
+    const remittanceItems = installmentIds.length
+      ? await this.prisma.pixRemittanceItem.findMany({
+          where: { supplierInstallmentId: { in: installmentIds } },
+          select: {
+            id: true,
+            pixRemittanceId: true,
+            supplierInstallmentId: true,
+            amountCents: true,
+          },
+        })
+      : [];
+    const affectedRemittanceIds = [
+      ...new Set(remittanceItems.map((item) => item.pixRemittanceId)),
+    ];
+
+    const cleanupResult = await this.prisma.$transaction(async (tx) => {
+      if (installmentIds.length) {
+        await tx.pixRemittanceItem.deleteMany({
+          where: { supplierInstallmentId: { in: installmentIds } },
+        });
+      }
+
+      await tx.fairSupplier.deleteMany({ where: { fairId } });
+
+      let deletedRemittances = 0;
+      let updatedRemittances = 0;
+
+      for (const remittanceId of affectedRemittanceIds) {
+        const remainingItems = await tx.pixRemittanceItem.findMany({
+          where: { pixRemittanceId: remittanceId },
+          select: { amountCents: true },
+        });
+
+        if (!remainingItems.length) {
+          await tx.pixRemittance.delete({ where: { id: remittanceId } });
+          deletedRemittances++;
+          continue;
+        }
+
+        await tx.pixRemittance.update({
+          where: { id: remittanceId },
+          data: {
+            totalItems: remainingItems.length,
+            totalAmountCents: remainingItems.reduce(
+              (sum, item) => sum + item.amountCents,
+              0,
+            ),
+            fileContent: null,
+          },
+        });
+        updatedRemittances++;
+      }
+
+      await this.audit.log(tx, {
+        action: AuditAction.DELETE,
+        entity: AuditEntity.FAIR_SUPPLIER,
+        entityId: fairId,
+        actorUserId,
+        before: suppliers,
+        meta: {
+          fairId,
+          mode: 'force_bulk_delete',
+          supplierIds,
+          deletedSuppliers: suppliers.length,
+          deletedInstallments,
+          deletedRemittanceItems: remittanceItems.length,
+          deletedRemittances,
+          updatedRemittances,
+        },
+      });
+
+      return {
+        deletedRemittanceItems: remittanceItems.length,
+        deletedRemittances,
+        updatedRemittances,
+      };
+    });
+
+    return {
+      status: 'DELETED',
+      deletedSuppliers: suppliers.length,
+      deletedInstallments,
+      ...cleanupResult,
+    };
   }
 
   private async requireFair(fairId: string) {

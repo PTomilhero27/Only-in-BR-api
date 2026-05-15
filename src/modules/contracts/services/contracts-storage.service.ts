@@ -174,12 +174,36 @@ export class ContractsStorageService {
         return found;
       }
 
-      // fluxo novo: 1:1 por ownerFairId
+      // fluxo novo: 1 por ownerFairId + type
+      // Verificar se existe contrato EXHIBITOR_SPECIFIC (prevalece)
+      const existing = await tx.contract.findUnique({
+        where: { ownerFairId_type: { ownerFairId: ownerFair.id, type: 'EXHIBITOR_SPECIFIC' } },
+        select: {
+          id: true,
+          ownerFairId: true,
+          templateId: true,
+          signUrl: true,
+          assinafyDocumentId: true,
+        },
+      });
+
+      if (existing) {
+        // se já existia e templateId diferente, falha
+        if (existing.templateId !== params.templateId) {
+          throw new BadRequestException(
+            'Já existe um contrato específico para este expositor nesta feira, mas com outro template. ' +
+              'Isso indica mudança de contrato. Recrie/reset o contrato antes de enviar novo PDF.',
+          );
+        }
+        return existing;
+      }
+
       const upserted = await tx.contract.upsert({
-        where: { ownerFairId: ownerFair.id },
+        where: { ownerFairId_type: { ownerFairId: ownerFair.id, type: 'FAIR_DEFAULT' } },
         create: {
           ownerFairId: ownerFair.id,
           templateId: params.templateId,
+          type: 'FAIR_DEFAULT',
         },
         update: {}, // ✅ não força mudar templateId aqui
         select: {

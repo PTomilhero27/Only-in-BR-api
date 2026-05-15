@@ -26,6 +26,34 @@ export type SispagPixRemittanceInput = {
 type SispagPixItem = SispagPixRemittanceInput['items'][number];
 
 /**
+ * Monta o arquivo CNAB mantendo registros fixos de 240 posicoes.
+ *
+ * Importante:
+ * - Nunca usar trim/trimEnd no conteudo final.
+ * - Cada linha deve ter exatamente 240 caracteres.
+ * - O arquivo deve terminar com CRLF final, inclusive apos o Trailer de Arquivo.
+ */
+export function buildCnab240File(lines: string[]): string {
+  lines.forEach((line, index) => {
+    const recordNumber = index + 1;
+
+    if (line.length !== 240) {
+      throw new InternalServerErrorException(
+        `Erro ao gerar CNAB 240: O registro ${recordNumber} possui ${line.length} caracteres.`,
+      );
+    }
+
+    if (Buffer.byteLength(line, 'ascii') !== 240) {
+      throw new InternalServerErrorException(
+        `Erro ao gerar CNAB 240: O registro ${recordNumber} nao possui 240 bytes ASCII.`,
+      );
+    }
+  });
+
+  return `${lines.join('\r\n')}\r\n`;
+}
+
+/**
  * Este service isola a complexidade do arquivo Itau/CNAB para evitar espalhar regra bancaria pelo dominio financeiro.
  */
 @Injectable()
@@ -60,17 +88,8 @@ export class SispagPixRemittanceFileService {
     // Trailer de Arquivo
     lines.push(this.buildFileTrailer(params));
 
-    // Valida que cada linha tem exatamente 240 caracteres
-    lines.forEach((line, index) => {
-      if (line.length !== 240) {
-        throw new InternalServerErrorException(
-          `Erro ao gerar CNAB 240: A linha ${index + 1} possui ${line.length} caracteres.`,
-        );
-      }
-    });
-
     return {
-      fileContent: `${lines.join('\r\n')}\r\n`,
+      fileContent: buildCnab240File(lines),
     };
   }
 
@@ -181,13 +200,16 @@ export class SispagPixRemittanceFileService {
     );
     line = this.set(line, 94, 101, this.formatDate(params.paymentDate), '9');
     line = this.set(line, 102, 104, 'REA', 'X');
+    line = this.set(line, 105, 112, '0', '9');
     line = this.set(line, 113, 114, '04', 'X');
     line = this.set(line, 115, 119, '0', '9');
     line = this.set(line, 120, 134, String(item.amountCents), '9');
+    line = this.set(line, 178, 191, '0', '9');
     line = this.set(line, 155, 162, '0', '9');
     line = this.set(line, 163, 177, '0', '9');
     line = this.set(line, 198, 203, '0', '9');
     line = this.set(line, 204, 217, this.onlyDigits(item.payeeDocument), '9');
+    line = this.set(line, 218, 218, '0', '9');
     line = this.set(line, 230, 230, '0', 'X');
 
     return line;

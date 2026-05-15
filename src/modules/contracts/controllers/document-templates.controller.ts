@@ -160,4 +160,39 @@ export class DocumentTemplatesController {
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
+
+  @Post(':id/duplicate')
+  @ApiOperation({
+    summary: 'Duplicar template',
+    description:
+      'Cria uma cópia de um template existente com status DRAFT. ' +
+      'Útil para criar variações do mesmo contrato para feiras diferentes sem precisar refazer do zero.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID do template original a ser duplicado (UUID).',
+    example: 'fcb5913a-f5f1-4353-967f-0d7e049d17e3',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          nullable: true,
+          description:
+            'Título customizado para a cópia. Se não informado, será "Cópia de {original.title}".',
+        },
+      },
+    },
+    required: false,
+  })
+  @ApiResponse({ status: 201, description: 'Template duplicado com sucesso.' })
+  @ApiResponse({ status: 404, description: 'Template original não encontrado.' })
+  duplicate(
+    @Param('id') id: string,
+    @Body() body: { title?: string },
+  ) {
+    return this.service.duplicate(id, body?.title);
+  }
 }

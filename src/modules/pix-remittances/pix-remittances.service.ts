@@ -68,6 +68,9 @@ export class PixRemittancesService {
 
     for (const supplier of suppliers) {
       for (const installment of supplier.installments) {
+        const payeeName = supplier.holderName ?? supplier.name;
+        const payeeDocument = supplier.holderDocument ?? supplier.document;
+
         // Apenas parcelas PENDING ou INCLUDED_IN_REMITTANCE aparecem
         if (
           installment.status === FairSupplierInstallmentStatus.PAID ||
@@ -80,9 +83,9 @@ export class PixRemittancesService {
           payeeType: PixRemittancePayeeType.SUPPLIER,
           supplierId: supplier.id,
           supplierInstallmentId: installment.id,
-          name: supplier.name,
-          holderName: supplier.holderName ?? undefined,
-          holderDocument: supplier.holderDocument ?? undefined,
+          name: payeeName,
+          holderName: payeeName ?? undefined,
+          holderDocument: payeeDocument ?? undefined,
           pixKey: supplier.pixKey ?? undefined,
           pixKeyType: supplier.pixKeyType ?? undefined,
           amountCents: installment.amountCents,
@@ -106,9 +109,9 @@ export class PixRemittancesService {
           item.disabledReason = 'Parcela já incluída em remessa ativa.';
         } else if (!supplier.pixKey || !supplier.pixKeyType) {
           item.disabledReason = 'Fornecedor sem chave PIX.';
-        } else if (!supplier.holderDocument) {
+        } else if (!payeeDocument) {
           item.disabledReason = 'Fornecedor sem documento do titular.';
-        } else if (!supplier.holderName) {
+        } else if (!payeeName) {
           item.disabledReason = 'Fornecedor sem nome do titular.';
         } else if (installment.amountCents <= 0) {
           item.disabledReason = 'Parcela com valor zerado.';
@@ -178,7 +181,7 @@ export class PixRemittancesService {
     }
 
     // Carregar dados do banco e validar elegibilidade
-    const supplierItems = await this.loadAndValidateSupplierItems(
+    const remittanceItems = await this.loadAndValidateRemittanceItems(
       fairId,
       dto.items,
     );
@@ -202,7 +205,7 @@ export class PixRemittancesService {
           tx,
           fairId,
           dto,
-          supplierItems,
+          remittanceItems,
           paymentDate,
           company,
           actorUserId,
@@ -212,8 +215,8 @@ export class PixRemittancesService {
         createdRemittances.push(remittance);
       } else {
         // ── SPLIT_TWO: dois grupos ────────────────────────────────────────────
-        const group1Items = supplierItems.filter((item) => item.group === 1);
-        const group2Items = supplierItems.filter((item) => item.group === 2);
+        const group1Items = remittanceItems.filter((item) => item.group === 1);
+        const group2Items = remittanceItems.filter((item) => item.group === 2);
 
         if (!group1Items.length || !group2Items.length) {
           throw new BadRequestException(
@@ -248,13 +251,28 @@ export class PixRemittancesService {
       }
 
       // Atualizar todas as parcelas para INCLUDED_IN_REMITTANCE
-      for (const item of supplierItems) {
-        await tx.fairSupplierInstallment.update({
-          where: { id: item.supplierInstallmentId! },
-          data: {
-            status: FairSupplierInstallmentStatus.INCLUDED_IN_REMITTANCE,
-          },
-        });
+      for (const item of remittanceItems) {
+        if (
+          item.payeeType === PixRemittancePayeeType.SUPPLIER &&
+          item.supplierInstallmentId
+        ) {
+          await tx.fairSupplierInstallment.update({
+            where: { id: item.supplierInstallmentId },
+            data: {
+              status: FairSupplierInstallmentStatus.INCLUDED_IN_REMITTANCE,
+            },
+          });
+        }
+
+        if (
+          item.payeeType === PixRemittancePayeeType.EXHIBITOR &&
+          item.exhibitorPayoutId
+        ) {
+          await tx.exhibitorPayout.update({
+            where: { id: item.exhibitorPayoutId },
+            data: { status: ExhibitorPayoutStatus.INCLUDED_IN_REMITTANCE },
+          });
+        }
       }
 
       // Auditoria
@@ -268,8 +286,8 @@ export class PixRemittancesService {
           mode,
           fairId,
           remittanceIds: createdRemittances.map((r) => r.id),
-          totalItems: supplierItems.length,
-          totalAmountCents: supplierItems.reduce(
+          totalItems: remittanceItems.length,
+          totalAmountCents: remittanceItems.reduce(
             (s, i) => s + i.amountCents,
             0,
           ),
@@ -465,13 +483,34 @@ export class PixRemittancesService {
   async getDownloadFile(fairId: string, remittanceId: string) {
     const remittance = await this.findRemittanceInFair(fairId, remittanceId);
 
-    if (!remittance.fileContent || !remittance.fileName) {
+    if (!remittance.fileName) {
       throw new NotFoundException('Arquivo da remessa não encontrado.');
+    }
+
+    const { fileContent } = this.fileService.generate({
+      remittanceId: remittance.id,
+      paymentDate: remittance.paymentDate,
+      company: this.loadCompanyConfig(),
+      items: remittance.items.map((item) => ({
+        amountCents: item.amountCents,
+        payeeName: item.payeeName,
+        payeeDocument: item.payeeDocument,
+        pixKeyType: item.pixKeyType,
+        pixKey: item.pixKey,
+        txId: item.txId,
+      })),
+    });
+
+    if (fileContent !== remittance.fileContent) {
+      await this.prisma.pixRemittance.update({
+        where: { id: remittance.id },
+        data: { fileContent },
+      });
     }
 
     return {
       fileName: remittance.fileName,
-      fileContent: remittance.fileContent,
+      fileContent,
     };
   }
 
@@ -483,7 +522,7 @@ export class PixRemittancesService {
     tx: any,
     fairId: string,
     dto: CreatePixRemittanceDto,
-    items: NormalizedSupplierItem[],
+    items: NormalizedRemittanceItem[],
     paymentDate: Date,
     company: SispagCompanyBankConfig,
     actorUserId: string,
@@ -495,9 +534,10 @@ export class PixRemittancesService {
     // Nome do arquivo
     const dateStr = this.formatDate(paymentDate);
     const fairSlug = this.slugifyFileName(fairName);
+    const filePrefix = this.getRemittanceFilePrefix(items);
     const fileName = groupNumber
-      ? `remessa-pix-${fairSlug}-grupo-${groupNumber}-${dateStr}.txt`
-      : `remessa-pix-${fairSlug}-${dateStr}.txt`;
+      ? `${filePrefix}-${fairSlug}-grupo-${groupNumber}-${dateStr}.txt`
+      : `${filePrefix}-${fairSlug}-${dateStr}.txt`;
 
     // Criar registro inicial
     const remittance = await tx.pixRemittance.create({
@@ -560,16 +600,39 @@ export class PixRemittancesService {
     };
   }
 
+  private async loadAndValidateRemittanceItems(
+    fairId: string,
+    items: CreatePixRemittanceItemDto[],
+  ): Promise<NormalizedRemittanceItem[]> {
+    const supplierItems = await this.loadAndValidateSupplierItems(
+      fairId,
+      items,
+    );
+    const exhibitorItems = await this.loadAndValidateExhibitorItems(
+      fairId,
+      items,
+    );
+
+    const remittanceItems = [...supplierItems, ...exhibitorItems];
+    if (!remittanceItems.length) {
+      throw new BadRequestException(
+        'Informe ao menos um item de fornecedor ou expositor.',
+      );
+    }
+
+    return remittanceItems;
+  }
+
   private async loadAndValidateSupplierItems(
     fairId: string,
     items: CreatePixRemittanceItemDto[],
-  ): Promise<NormalizedSupplierItem[]> {
+  ): Promise<NormalizedRemittanceItem[]> {
     const supplierDtos = items.filter(
       (item) => item.payeeType === PixRemittancePayeeType.SUPPLIER,
     );
 
     if (!supplierDtos.length) {
-      throw new BadRequestException('Informe ao menos um item de fornecedor.');
+      return [];
     }
 
     const ids = supplierDtos.map(
@@ -614,14 +677,22 @@ export class PixRemittancesService {
       }
 
       // Fornecedor deve ter documento do titular
-      if (!installment.supplier.holderDocument) {
+      const supplier = installment.supplier;
+      const payeeDocument = this.normalizeDocument(
+        supplier.holderDocument ?? supplier.document,
+      );
+      const payeeName = this.normalizeName(
+        supplier.holderName ?? supplier.name,
+      );
+
+      if (!payeeDocument) {
         throw new BadRequestException(
           `Fornecedor "${installment.supplier.name}" não possui documento do titular.`,
         );
       }
 
       // Fornecedor deve ter nome do titular
-      if (!installment.supplier.holderName) {
+      if (!payeeName) {
         throw new BadRequestException(
           `Fornecedor "${installment.supplier.name}" não possui nome do titular.`,
         );
@@ -650,10 +721,107 @@ export class PixRemittancesService {
         supplierInstallmentId: installment.id,
         exhibitorPayoutId: null,
         amountCents: dto.amountCents,
-        payeeName: installment.supplier.holderName,
-        payeeDocument: installment.supplier.holderDocument,
-        pixKeyType: installment.supplier.pixKeyType as PixKeyType,
-        pixKey: installment.supplier.pixKey,
+        payeeName,
+        payeeDocument,
+        pixKeyType: supplier.pixKeyType as PixKeyType,
+        pixKey: this.normalizePixKey(supplier.pixKeyType, supplier.pixKey),
+        txId: null,
+        group: dto.group ?? 1,
+      };
+    });
+  }
+
+  private async loadAndValidateExhibitorItems(
+    fairId: string,
+    items: CreatePixRemittanceItemDto[],
+  ): Promise<NormalizedRemittanceItem[]> {
+    const exhibitorDtos = items.filter(
+      (item) => item.payeeType === PixRemittancePayeeType.EXHIBITOR,
+    );
+
+    if (!exhibitorDtos.length) {
+      return [];
+    }
+
+    const ids = exhibitorDtos.map((item) => item.exhibitorPayoutId as string);
+
+    const payouts = await this.prisma.exhibitorPayout.findMany({
+      where: { id: { in: ids } },
+      include: { ownerFair: { include: { owner: true } } },
+    });
+
+    if (payouts.length !== ids.length) {
+      throw new NotFoundException(
+        'Um ou mais repasses de expositor nao foram encontrados.',
+      );
+    }
+
+    return payouts.map((payout) => {
+      const dto = exhibitorDtos.find((d) => d.exhibitorPayoutId === payout.id)!;
+
+      if (payout.ownerFair.fairId !== fairId) {
+        throw new BadRequestException(
+          `Repasse ${payout.id} nao pertence a feira da rota.`,
+        );
+      }
+
+      if (payout.status !== ExhibitorPayoutStatus.PENDING) {
+        throw new ConflictException(
+          `Repasse ${payout.id} nao esta PENDING (status atual: ${payout.status}).`,
+        );
+      }
+
+      const owner = payout.ownerFair.owner;
+      const payeeDocument = this.normalizeDocument(
+        owner.bankHolderDoc ?? owner.document,
+      );
+      const payeeName = this.normalizeName(
+        owner.bankHolderName ?? owner.fullName,
+      );
+
+      if (!owner.pixKey || !owner.pixKeyType) {
+        throw new BadRequestException(
+          `Expositor "${owner.fullName ?? payout.id}" nao possui chave PIX configurada.`,
+        );
+      }
+
+      if (!payeeDocument) {
+        throw new BadRequestException(
+          `Expositor "${owner.fullName ?? payout.id}" nao possui documento do titular.`,
+        );
+      }
+
+      if (!payeeName) {
+        throw new BadRequestException(
+          `Expositor "${owner.fullName ?? payout.id}" nao possui nome do titular.`,
+        );
+      }
+
+      if (!dto.amountCents || dto.amountCents <= 0) {
+        throw new BadRequestException(
+          `Valor invalido para o repasse ${payout.id}.`,
+        );
+      }
+
+      if (dto.amountCents > payout.netAmountCents) {
+        throw new BadRequestException(
+          `Valor informado (${dto.amountCents}) e maior que o valor do repasse (${payout.netAmountCents}).`,
+        );
+      }
+
+      if (dto.group !== undefined && dto.group !== 1 && dto.group !== 2) {
+        throw new BadRequestException('O campo group deve ser 1 ou 2.');
+      }
+
+      return {
+        payeeType: PixRemittancePayeeType.EXHIBITOR,
+        supplierInstallmentId: null,
+        exhibitorPayoutId: payout.id,
+        amountCents: dto.amountCents,
+        payeeName,
+        payeeDocument,
+        pixKeyType: owner.pixKeyType as PixKeyType,
+        pixKey: this.normalizePixKey(owner.pixKeyType, owner.pixKey),
         txId: null,
         group: dto.group ?? 1,
       };
@@ -813,10 +981,46 @@ export class PixRemittancesService {
         .slice(0, 80) || 'feira'
     );
   }
+
+  private normalizeName(value?: string | null) {
+    return String(value ?? '').trim();
+  }
+
+  private normalizeDocument(value?: string | null) {
+    return String(value ?? '').replace(/[^\d]+/g, '');
+  }
+
+  private normalizePixKey(type: PixKeyType, value: string) {
+    if (type === PixKeyType.CPF || type === PixKeyType.CNPJ) {
+      return this.normalizeDocument(value);
+    }
+
+    return value.trim();
+  }
+
+  private getRemittanceFilePrefix(items: NormalizedRemittanceItem[]) {
+    const payeeTypes = new Set(items.map((item) => item.payeeType));
+
+    if (
+      payeeTypes.size === 1 &&
+      payeeTypes.has(PixRemittancePayeeType.SUPPLIER)
+    ) {
+      return 'remessa-fornecedor';
+    }
+
+    if (
+      payeeTypes.size === 1 &&
+      payeeTypes.has(PixRemittancePayeeType.EXHIBITOR)
+    ) {
+      return 'remessa-expositor';
+    }
+
+    return 'remessa-pix';
+  }
 }
 
 // Tipo interno para itens normalizados já validados
-type NormalizedSupplierItem = {
+type NormalizedRemittanceItem = {
   payeeType: PixRemittancePayeeType;
   supplierInstallmentId: string | null;
   exhibitorPayoutId: string | null;

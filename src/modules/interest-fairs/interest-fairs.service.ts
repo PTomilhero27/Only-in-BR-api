@@ -554,7 +554,7 @@ export class InterestFairsService {
       include: {
         stallFairs: { select: { id: true } },
         ownerFairPurchases: { select: { id: true } },
-        contract: { select: { id: true, assinafyDocumentId: true } },
+        contracts: { select: { id: true, assinafyDocumentId: true }, orderBy: { updatedAt: 'desc' } },
         addendum: { select: { id: true } },
       },
     });
@@ -562,6 +562,7 @@ export class InterestFairsService {
     if (!existing) throw new NotFoundException('Vínculo não encontrado.');
 
     // ✅ snapshot mínimo (auditoria)
+    const effectiveContract = existing.contracts?.[0] ?? null;
     const before = {
       ownerFairId: existing.id,
       ownerId,
@@ -574,13 +575,13 @@ export class InterestFairsService {
       counts: {
         stallFairs: existing.stallFairs.length,
         purchases: existing.ownerFairPurchases.length,
-        hasContract: !!existing.contract,
+        hasContract: !!effectiveContract,
         hasAddendum: !!existing.addendum,
       },
-      contract: existing.contract
+      contract: effectiveContract
         ? {
-            id: existing.contract.id,
-            assinafyDocumentId: existing.contract.assinafyDocumentId ?? null,
+            id: effectiveContract.id,
+            assinafyDocumentId: effectiveContract.assinafyDocumentId ?? null,
           }
         : null,
     };

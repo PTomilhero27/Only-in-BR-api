@@ -92,7 +92,7 @@ export class PixRemittancesController {
         createdRemittances: [
           {
             id: 'cuid',
-            fileName: 'remessa-pix-feira-abc12345-20260510.txt',
+            fileName: 'remessa-fornecedor-feira-abc12345-20260510.txt',
             groupNumber: null,
             totalItems: 5,
             totalAmountCents: 820000,
@@ -156,9 +156,9 @@ export class PixRemittancesController {
       remittanceId,
     );
 
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Type', 'text/plain; charset=ascii');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.send(fileContent);
+    res.send(Buffer.from(fileContent, 'ascii'));
   }
 
   // ─── PATCH /:remittanceId/mark-paid ───────────────────────────────────────

@@ -10,18 +10,18 @@ import { ContractsAssinafyController } from './controllers/contracts-assinafy.co
 import { ContractsAssinafyService } from './services/contracts-assinafy.service';
 import { ContractsAssinafyWebhooksService } from './services/contracts-assinafy-webhooks.service';
 import { ContractsAssinafyWebhooksController } from './controllers/contracts-assinafy-webhooks.controller';
+import { ContractManagementController } from './controllers/contract-management.controller';
+import { ContractManagementService } from './services/contract-management.service';
 
 /**
- * Módulo de Contratos (versão inicial).
- * Responsabilidade nesta etapa:
+ * Módulo de Contratos.
+ * Responsabilidade:
  * - CRUD de templates de documentos (contratos e aditivos) no catálogo global.
- *
- * Observação:
- * - Em etapas futuras, este mesmo módulo também abrigará:
- *   - versionamento
- *   - geração de PDF
- *   - integração Assinafy
- *   - settings por feira e aditivo por expositor
+ * - Duplicação de templates.
+ * - Gerenciamento de contratos por tipo (FAIR_DEFAULT, MULTI_FAIR, EXHIBITOR_SPECIFIC).
+ * - Integração Assinafy (assinatura digital).
+ * - Upload/armazenamento de PDFs.
+ * - Webhook de assinatura.
  */
 @Module({
   imports: [PrismaModule],
@@ -31,12 +31,14 @@ import { ContractsAssinafyWebhooksController } from './controllers/contracts-ass
     ContractsFilesController,
     ContractsAssinafyController,
     ContractsAssinafyWebhooksController,
+    ContractManagementController,
   ],
   providers: [
     DocumentTemplatesService,
     ContractsStorageService,
     ContractsAssinafyService,
     ContractsAssinafyWebhooksService,
+    ContractManagementService,
   ],
   exports: [DocumentTemplatesService],
 })

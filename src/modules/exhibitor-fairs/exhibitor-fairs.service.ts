@@ -290,10 +290,12 @@ export class ExhibitorFairsService {
           },
         },
 
-        // ✅ contrato por feira/expositor (inclui signedAt pra UI)
-        contract: {
+        // ✅ contratos por feira/expositor (pode haver mais de 1 tipo)
+        contracts: {
+          orderBy: { updatedAt: 'desc' as const },
           select: {
             id: true,
+            type: true,
             pdfPath: true,
             signUrl: true,
             signUrlExpiresAt: true,
@@ -355,15 +357,21 @@ export class ExhibitorFairsService {
 
       const paymentSummary = this.buildPaymentSummaryFromPurchases(purchases);
 
+      // Contrato efetivo: EXHIBITOR_SPECIFIC > MULTI_FAIR > FAIR_DEFAULT
+      const effectiveContract = of.contracts?.find(c => c.type === 'EXHIBITOR_SPECIFIC')
+        ?? of.contracts?.find(c => c.type === 'MULTI_FAIR')
+        ?? of.contracts?.[0]
+        ?? null;
+
       const contractSummary = this.buildContractSummary({
-        contract: of.contract
+        contract: effectiveContract
           ? {
-              id: of.contract.id,
-              pdfPath: of.contract.pdfPath ?? null,
-              signUrl: of.contract.signUrl ?? null,
-              signUrlExpiresAt: of.contract.signUrlExpiresAt ?? null,
-              updatedAt: of.contract.updatedAt,
-              signedAt: of.contract.signedAt ?? null,
+              id: effectiveContract.id,
+              pdfPath: effectiveContract.pdfPath ?? null,
+              signUrl: effectiveContract.signUrl ?? null,
+              signUrlExpiresAt: effectiveContract.signUrlExpiresAt ?? null,
+              updatedAt: effectiveContract.updatedAt,
+              signedAt: effectiveContract.signedAt ?? null,
             }
           : null,
         contractSignedAt: of.contractSignedAt ?? null,

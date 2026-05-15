@@ -236,6 +236,36 @@ export class DocumentTemplatesService {
     };
   }
 
+  /**
+   * Duplica um template existente.
+   * - Copia título (com prefixo), conteúdo, flags.
+   * - Status sempre DRAFT.
+   * - Retorna o novo template para edição.
+   */
+  async duplicate(id: string, customTitle?: string) {
+    const original = await this.prisma.documentTemplate.findUnique({
+      where: { id },
+    });
+
+    if (!original) {
+      throw new NotFoundException('Template não encontrado.');
+    }
+
+    const title = customTitle?.trim() || `Cópia de ${original.title}`;
+
+    const duplicated = await this.prisma.documentTemplate.create({
+      data: {
+        title,
+        isAddendum: original.isAddendum,
+        hasRegistration: original.hasRegistration,
+        status: 'DRAFT',
+        content: original.content as any,
+      },
+    });
+
+    return duplicated;
+  }
+
   private async ensureExists(id: string) {
     const found = await this.prisma.documentTemplate.findUnique({
       where: { id },

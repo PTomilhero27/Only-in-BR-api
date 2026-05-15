@@ -166,6 +166,18 @@ enum MarketplaceSlotStatus {
   BLOCKED
 }
 
+/**
+ * Tipo do contrato gerado para o expositor.
+ * FAIR_DEFAULT = contrato padrão da feira (comportamento atual).
+ * MULTI_FAIR = contrato unificado que cobre 2+ feiras.
+ * EXHIBITOR_SPECIFIC = personalizado para um expositor específico.
+ */
+enum ContractType {
+  FAIR_DEFAULT
+  MULTI_FAIR
+  EXHIBITOR_SPECIFIC
+}
+
 enum MarketplaceInterestStatus {
   NEW
   CONTACTED
@@ -644,9 +656,11 @@ model OwnerFair {
   stallFairs StallFair[]
 
   /**
-   * ✅ Contrato gerado para este expositor nesta feira.
+   * ✅ Contratos gerados para este expositor nesta feira.
+   * Pode haver mais de um (FAIR_DEFAULT, MULTI_FAIR, EXHIBITOR_SPECIFIC).
+   * Regra: no máximo 1 por tipo (@@unique([ownerFairId, type])).
    */
-  contract Contract?
+  contracts Contract[]
 
   /**
    * ✅ Aditivo opcional por expositor nesta feira.
@@ -1375,7 +1389,8 @@ model DocumentTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  fairContractSettings FairContractSettings[]
+  fairContractSettings      FairContractSettings[]
+  multiFairContractSettings FairContractSettings[] @relation("FairMultiFairTemplate")
 
   @@index([status])
   @@index([isAddendum])
@@ -1394,6 +1409,14 @@ model FairContractSettings {
   templateId String
   template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
 
+  /**
+   * ✅ Template opcional para contratos que unificam múltiplas feiras.
+   * Quando configurado, expositores que fecharem 2+ feiras usam este template.
+   * Regra: deve ser isAddendum = false.
+   */
+  multiFairTemplateId String?
+  multiFairTemplate   DocumentTemplate? @relation("FairMultiFairTemplate", fields: [multiFairTemplateId], references: [id], onDelete: Restrict)
+
   updatedByUserId String?
   updatedBy       User?   @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
@@ -1401,12 +1424,13 @@ model FairContractSettings {
   updatedAt DateTime @updatedAt
 
   @@index([templateId])
+  @@index([multiFairTemplateId])
 }
 
 model Contract {
   id String @id @default(uuid())
 
-  ownerFairId String    @unique
+  ownerFairId String
   ownerFair   OwnerFair @relation(fields: [ownerFairId], references: [id], onDelete: Cascade)
 
   templateId String
@@ -1414,6 +1438,24 @@ model Contract {
 
   addendumTemplateId String?
   addendumTemplate   DocumentTemplate? @relation("ContractAddendumTemplate", fields: [addendumTemplateId], references: [id], onDelete: Restrict)
+
+  /**
+   * ✅ Tipo do contrato.
+   * FAIR_DEFAULT  = padrão da feira (comportamento legado).
+   * MULTI_FAIR    = unifica 2+ feiras num único contrato.
+   * EXHIBITOR_SPECIFIC = personalizado para um expositor.
+   */
+  type ContractType @default(FAIR_DEFAULT)
+
+  /**
+   * Título/nome customizado do contrato (útil na UI para diferenciar).
+   */
+  title String?
+
+  /**
+   * Observações internas do admin sobre este contrato.
+   */
+  notes String?
 
   pdfPath      String?
   dataSnapshot Json?
@@ -1426,11 +1468,50 @@ model Contract {
 
   signedAt DateTime?
 
+  /**
+   * Feiras adicionais cobertas por este contrato (para MULTI_FAIR).
+   */
+  fairLinks ContractFairLink[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /**
+   * Um expositor não pode ter 2 contratos do mesmo tipo na mesma feira.
+   */
+  @@unique([ownerFairId, type])
+  @@index([ownerFairId])
   @@index([templateId])
   @@index([addendumTemplateId])
+  @@index([type])
+}
+
+/**
+ * Tabela de junção: feiras adicionais cobertas por um contrato MULTI_FAIR.
+ * O contrato já pertence a um OwnerFair (feira principal).
+ * ContractFairLink registra as feiras extras cobertas.
+ */
+model ContractFairLink {
+  id String @id @default(cuid())
+
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  /**
+   * Feira adicional coberta (além da feira do OwnerFair principal).
+   */
+  fairId String
+
+  /**
+   * OwnerFair do expositor nesta feira adicional (para rastreabilidade).
+   */
+  ownerFairId String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([contractId, fairId])
+  @@index([contractId])
+  @@index([fairId])
 }
 
 model OwnerFairAddendum {

@@ -725,15 +725,36 @@ export class ContractsAssinafyService {
       );
     }
 
-    // 2) garante Contract (1 por ownerFairId)
-    const contract = await this.prisma.contract.upsert({
-      where: { ownerFairId: ownerFair.id },
+    // 2) Verificar se existe contrato EXHIBITOR_SPECIFIC (prevalece sobre DEFAULT)
+    const specificContract = await this.prisma.contract.findUnique({
+      where: { ownerFairId_type: { ownerFairId: ownerFair.id, type: 'EXHIBITOR_SPECIFIC' } },
+      select: {
+        id: true,
+        pdfPath: true,
+        signedAt: true,
+        assinafyDocumentId: true,
+        assinafySignerId: true,
+        signUrl: true,
+        signUrlExpiresAt: true,
+        type: true,
+        templateId: true,
+      },
+    });
+
+    // Se existe contrato específico, usar esse ao invés do padrão da feira
+    const effectiveTemplateId = specificContract?.templateId ?? mainTemplateId;
+
+    // 3) garante Contract (1 por ownerFairId + type)
+    const contractType = specificContract ? 'EXHIBITOR_SPECIFIC' as const : 'FAIR_DEFAULT' as const;
+    const contract = specificContract ?? await this.prisma.contract.upsert({
+      where: { ownerFairId_type: { ownerFairId: ownerFair.id, type: 'FAIR_DEFAULT' } },
       update: {
-        templateId: mainTemplateId,
+        templateId: effectiveTemplateId,
       },
       create: {
         ownerFairId: ownerFair.id,
-        templateId: mainTemplateId,
+        templateId: effectiveTemplateId,
+        type: 'FAIR_DEFAULT',
       },
       select: {
         id: true,
@@ -743,6 +764,8 @@ export class ContractsAssinafyService {
         assinafySignerId: true,
         signUrl: true,
         signUrlExpiresAt: true,
+        type: true,
+        templateId: true,
       },
     });
 
