@@ -46,7 +46,9 @@ export class UsersController {
    */
   @Get()
   list(@CurrentUser() user: any, @Query() dto: ListUsersDto) {
-    this.assertAdmin(user);
+    if (!user || user.role === UserRole.EXHIBITOR) {
+      throw new ForbiddenException('Acesso restrito a usuários do painel.');
+    }
     return this.users.listNonExhibitors(dto);
   }
 

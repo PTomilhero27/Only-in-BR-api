@@ -32,6 +32,9 @@ import { FairShowcaseModule } from './modules/fair-showcase/fair-showcase.module
 import { ExhibitorPayoutsModule } from './modules/exhibitor-payouts/exhibitor-payouts.module';
 import { FairSuppliersModule } from './modules/fair-suppliers/fair-suppliers.module';
 import { PixRemittancesModule } from './modules/pix-remittances/pix-remittances.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { InventoryReservationsModule } from './modules/inventory-reservations/inventory-reservations.module';
+import { InventoryMovementsModule } from './modules/inventory-movements/inventory-movements.module';
 
 @Global()
 @Module({
@@ -65,6 +68,9 @@ import { PixRemittancesModule } from './modules/pix-remittances/pix-remittances.
     ExhibitorPayoutsModule,
     FairSuppliersModule,
     PixRemittancesModule,
+    InventoryModule,
+    InventoryReservationsModule,
+    InventoryMovementsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],

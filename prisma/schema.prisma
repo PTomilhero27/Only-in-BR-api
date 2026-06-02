@@ -75,6 +75,9 @@ enum AuditEntity {
   FAIR_SUPPLIER
   PIX_REMITTANCE
   EXHIBITOR_PAYOUT
+  INVENTORY_ITEM
+  INVENTORY_RESERVATION
+  INVENTORY_MOVEMENT
 }
 
 enum AdjustmentType {
@@ -192,6 +195,34 @@ enum MarketplaceReservationStatus {
   EXPIRED
   CANCELLED
   CONVERTED
+}
+
+enum InventoryItemStatus {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
+  INACTIVE
+  DAMAGED
+}
+
+enum InventoryReservationStatus {
+  PENDING
+  APPROVED
+  SEPARATING
+  READY_FOR_PICKUP
+  PICKED_UP
+  PARTIALLY_RETURNED
+  RETURNED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  IN
+  OUT
+  RETURN
+  LOSS
+  ADJUSTMENT
+  DAMAGE
 }
 
 // =====================
@@ -442,6 +473,8 @@ model Fair {
   fairMapSlots            FairMapSlot[]
   marketplaceInterests    MarketplaceSlotInterest[]
   marketplaceReservations MarketplaceSlotReservation[]
+  inventoryReservations   InventoryReservation[]
+  inventoryMovements      InventoryMovement[]
 
   /**
    * ✅ Vitrine pública da feira (conteúdo editorial).
@@ -1358,6 +1391,117 @@ model AuditLog {
 
   @@index([entity, entityId])
   @@index([actorUserId])
+  @@index([createdAt])
+}
+
+// =====================
+// ESTOQUE / ARMAZENAGEM
+// =====================
+
+model InventoryItem {
+  id String @id @default(uuid())
+
+  name        String
+  category    String?
+  unit        String              @default("UN")
+  imageUrl    String?
+  location    String?
+  quantity    Int                 @default(0)
+  minQuantity Int                 @default(0)
+  status      InventoryItemStatus @default(IN_STOCK)
+  notes       String?
+
+  movements        InventoryMovement[]
+  reservationItems InventoryReservationItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([category])
+  @@index([status])
+}
+
+model InventoryReservation {
+  id String @id @default(uuid())
+
+  fairId  String?
+  fair    Fair?   @relation(fields: [fairId], references: [id], onDelete: SetNull)
+  purpose String?
+
+  requesterUserId String?
+  responsibleName String?
+
+  status InventoryReservationStatus @default(PENDING)
+
+  expectedPickupAt DateTime?
+  pickedUpAt       DateTime?
+  returnedAt       DateTime?
+
+  notes String?
+
+  items     InventoryReservationItem[]
+  movements InventoryMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fairId])
+  @@index([status])
+  @@index([requesterUserId])
+}
+
+model InventoryReservationItem {
+  id String @id @default(uuid())
+
+  reservationId String
+  itemId        String
+
+  requestedQty Int
+  approvedQty  Int?
+  pickedQty    Int?
+  returnedQty  Int?
+  lostQty      Int?
+  damagedQty   Int?
+  consumedQty  Int?
+
+  notes String?
+
+  reservation InventoryReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  item        InventoryItem        @relation(fields: [itemId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([reservationId, itemId])
+  @@index([itemId])
+}
+
+model InventoryMovement {
+  id String @id @default(uuid())
+
+  itemId        String
+  reservationId String?
+
+  type     InventoryMovementType
+  quantity Int
+
+  fairId  String?
+  fair    Fair?   @relation(fields: [fairId], references: [id], onDelete: SetNull)
+  purpose String?
+  notes   String?
+
+  createdById String?
+
+  item        InventoryItem         @relation(fields: [itemId], references: [id])
+  reservation InventoryReservation? @relation(fields: [reservationId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([itemId])
+  @@index([reservationId])
+  @@index([type])
+  @@index([fairId])
   @@index([createdAt])
 }
 
