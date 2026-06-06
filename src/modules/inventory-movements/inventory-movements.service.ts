@@ -31,7 +31,10 @@ export class InventoryMovementsService {
     const [rows, total] = await Promise.all([
       this.prisma.inventoryMovement.findMany({
         where,
-        include: { item: { select: { name: true } } },
+        include: {
+          item: { select: { name: true } },
+          createdBy: { select: { name: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
@@ -40,7 +43,7 @@ export class InventoryMovementsService {
     ]);
 
     return {
-      items: rows.map((m) => ({
+      items: rows.map((m: any) => ({
         id: m.id,
         itemId: m.itemId,
         itemName: m.item.name,
@@ -51,6 +54,10 @@ export class InventoryMovementsService {
         purpose: m.purpose,
         notes: m.notes,
         createdById: m.createdById,
+        createdByName: m.createdBy?.name,
+        responsibleName: m.responsibleName,
+        requiresReturn: m.requiresReturn,
+        returnedQty: m.returnedQty,
         createdAt: m.createdAt.toISOString(),
       })),
       meta: { page, perPage, total },

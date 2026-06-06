@@ -12,6 +12,7 @@ import { InventoryItemDetailsResponseDto } from './dto/inventory-item-details-re
 import { CheckInventoryAvailabilityDto, InventoryAvailabilityResponseDto } from './dto/availability.dto';
 import { CreateInventoryMovementDto } from '../inventory-movements/dto/create-inventory-movement.dto';
 import { InventoryImportConfigDto } from './dto/inventory-import.dto';
+import { CreateInventoryCategoryDto } from './dto/create-category.dto';
 
 /**
  * Controller administrativo de itens do estoque.
@@ -101,5 +102,39 @@ export class InventoryController {
   @ApiOkResponse({ type: InventoryAvailabilityResponseDto })
   async checkAvailability(@Body() dto: CheckInventoryAvailabilityDto) {
     return { items: await this.service.checkAvailability(dto.items) };
+  }
+  /** Listar todas as categorias de estoque. */
+  @Get('categories')
+  @ApiOperation({ summary: 'Listar categorias de estoque.' })
+  listCategories() {
+    return this.service.listCategories();
+  }
+
+  /** Criar uma nova categoria de estoque. */
+  @Post('categories')
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Criar categoria de estoque.' })
+  createCategory(@Body() dto: CreateInventoryCategoryDto, @CurrentUser() user: JwtPayload) {
+    return this.service.createCategory(dto, user.id);
+  }
+
+  /** Deletar uma categoria de estoque. */
+  @Delete('categories/:id')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Deletar categoria de estoque.' })
+  deleteCategory(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.deleteCategory(id, user.id);
+  }
+
+  /** Registrar devolução de uma movimentação manual específica. */
+  @Post('movements/:id/return')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Registrar devolucao de movimentacao manual.' })
+  returnManualMovement(
+    @Param('id') id: string,
+    @Body() dto: { quantity: number; finalize?: boolean },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.returnManualMovement(id, dto.quantity, user.id, dto.finalize);
   }
 }

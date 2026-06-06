@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { InventoryMovementType } from '@prisma/client';
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, MaxLength, NotEquals } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID, MaxLength, NotEquals } from 'class-validator';
 
 /**
  * DTO de movimentacao manual.
@@ -8,7 +8,7 @@ import { IsEnum, IsInt, IsOptional, IsString, IsUUID, MaxLength, NotEquals } fro
  */
 export class CreateInventoryMovementDto {
   @ApiProperty({
-    enum: [InventoryMovementType.IN, InventoryMovementType.ADJUSTMENT, InventoryMovementType.DAMAGE],
+    enum: [InventoryMovementType.IN, InventoryMovementType.OUT, InventoryMovementType.ADJUSTMENT, InventoryMovementType.DAMAGE],
     example: InventoryMovementType.IN,
   })
   @IsEnum(InventoryMovementType)
@@ -34,4 +34,15 @@ export class CreateInventoryMovementDto {
   @IsString()
   @MaxLength(240)
   purpose?: string;
+
+  @ApiPropertyOptional({ example: false, description: 'Indica se esta saida exige devolucao posterior.' })
+  @IsOptional()
+  @IsBoolean()
+  requiresReturn?: boolean;
+
+  @ApiPropertyOptional({ example: 'Joao da Silva', description: 'Nome da pessoa que retirou o material.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  responsibleName?: string;
 }

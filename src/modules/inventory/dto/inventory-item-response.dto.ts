@@ -15,6 +15,9 @@ export class InventoryItemResponseDto {
   @ApiPropertyOptional({ example: 'Bebidas' })
   category?: string | null;
 
+  @ApiPropertyOptional({ example: [{ id: 'uuid-cat', name: 'Bebidas' }] })
+  categories?: Array<{ id: string; name: string }>;
+
   @ApiProperty({ example: 'UN' })
   unit!: string;
 

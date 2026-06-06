@@ -21,6 +21,9 @@ export class InventoryReservationResponseDto {
   @ApiPropertyOptional({ example: 'user_id' })
   requesterUserId?: string | null;
 
+  @ApiPropertyOptional({ example: 'Pedro Tomilhero' })
+  requesterName?: string | null;
+
   @ApiPropertyOptional({ example: 'Maria Souza' })
   responsibleName?: string | null;
 

@@ -50,6 +50,12 @@ export class CreateInventoryReservationDto {
   @MaxLength(240)
   purpose?: string;
 
+  @ApiPropertyOptional({ example: 'Pedro Tomilhero' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  requesterName?: string;
+
   @ApiPropertyOptional({ example: 'Maria Souza' })
   @IsOptional()
   @IsString()

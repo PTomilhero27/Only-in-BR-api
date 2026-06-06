@@ -44,6 +44,7 @@ export class InventoryReservationsService {
       where.OR = [
         { purpose: { contains: query.search, mode: 'insensitive' } },
         { responsibleName: { contains: query.search, mode: 'insensitive' } },
+        { requesterName: { contains: query.search, mode: 'insensitive' } },
         { notes: { contains: query.search, mode: 'insensitive' } },
       ];
     }
@@ -56,7 +57,10 @@ export class InventoryReservationsService {
     const [rows, total] = await Promise.all([
       this.prisma.inventoryReservation.findMany({
         where,
-        include: { fair: { select: { name: true } }, items: true },
+        include: {
+          fair: { select: { name: true } },
+          items: { include: { item: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
@@ -83,6 +87,7 @@ export class InventoryReservationsService {
           fairId: dto.fairId,
           purpose: dto.purpose,
           requesterUserId: actorUserId,
+          requesterName: dto.requesterName,
           responsibleName: dto.responsibleName,
           expectedPickupAt: dto.expectedPickupAt ? new Date(dto.expectedPickupAt) : null,
           notes: dto.notes,
@@ -240,9 +245,7 @@ export class InventoryReservationsService {
         const currentResolved = (ri.returnedQty ?? 0) + (ri.lostQty ?? 0) + (ri.damagedQty ?? 0) + (ri.consumedQty ?? 0);
         const newResolved = currentResolved + returnedQty + lostQty + damagedQty + consumedQty;
         const pickedQty = ri.pickedQty ?? 0;
-        if (newResolved > pickedQty && !(input.notes?.trim() || dto.notes?.trim())) {
-          throw new BadRequestException('Divergencia na devolucao exige observacao explicativa.');
-        }
+        // Removida a exigência de observação explicativa para divergências de devolução
 
         await tx.inventoryReservationItem.update({
           where: { reservationId_itemId: { reservationId: id, itemId: input.itemId } },
@@ -398,6 +401,7 @@ export class InventoryReservationsService {
       fairName: r.fair?.name ?? null,
       purpose: r.purpose,
       requesterUserId: r.requesterUserId,
+      requesterName: r.requesterName,
       responsibleName: r.responsibleName,
       status: r.status,
       expectedPickupAt: r.expectedPickupAt?.toISOString?.() ?? r.expectedPickupAt,
@@ -406,14 +410,7 @@ export class InventoryReservationsService {
       itemsCount: items.length,
       requestedTotal: items.reduce((acc: number, item: any) => acc + item.requestedQty, 0),
       createdAt: r.createdAt?.toISOString?.() ?? r.createdAt,
-    };
-  }
-
-  private toReservationDetails(r: any) {
-    return {
-      ...this.toReservationResponse(r),
-      notes: r.notes,
-      items: (r.items ?? []).map((ri: any) => ({
+      items: items.map((ri: any) => ({
         id: ri.id,
         itemId: ri.itemId,
         name: ri.item?.name,
@@ -427,6 +424,13 @@ export class InventoryReservationsService {
         consumedQty: ri.consumedQty,
         notes: ri.notes,
       })),
+    };
+  }
+
+  private toReservationDetails(r: any) {
+    return {
+      ...this.toReservationResponse(r),
+      notes: r.notes,
       movements: (r.movements ?? []).map((m: any) => ({
         id: m.id,
         itemId: m.itemId,

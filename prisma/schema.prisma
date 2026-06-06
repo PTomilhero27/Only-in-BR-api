@@ -339,12 +339,13 @@ model User {
   ownerId String?
   owner   Owner?  @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 
-  fairsCreated             Fair[]             @relation("FairsCreated")
-  auditLogs                AuditLog[]         @relation("UserAuditLogs")
-  documentTemplatesCreated DocumentTemplate[] @relation("DocumentTemplatesCreatedBy")
-  fairSuppliersCreated     FairSupplier[]     @relation("FairSuppliersCreatedBy")
-  pixRemittancesCreated    PixRemittance[]    @relation("PixRemittancesCreatedBy")
-  exhibitorPayoutsCreated  ExhibitorPayout[]
+  fairsCreated              Fair[]             @relation("FairsCreated")
+  auditLogs                 AuditLog[]         @relation("UserAuditLogs")
+  documentTemplatesCreated  DocumentTemplate[] @relation("DocumentTemplatesCreatedBy")
+  fairSuppliersCreated      FairSupplier[]     @relation("FairSuppliersCreatedBy")
+  pixRemittancesCreated     PixRemittance[]    @relation("PixRemittancesCreatedBy")
+  exhibitorPayoutsCreated   ExhibitorPayout[]
+  inventoryMovementsCreated InventoryMovement[] @relation("InventoryMovementsCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1411,6 +1412,7 @@ model InventoryItem {
   status      InventoryItemStatus @default(IN_STOCK)
   notes       String?
 
+  categories       InventoryCategory[]
   movements        InventoryMovement[]
   reservationItems InventoryReservationItem[]
 
@@ -1422,6 +1424,17 @@ model InventoryItem {
   @@index([status])
 }
 
+model InventoryCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items InventoryItem[]
+
+  @@index([name])
+}
+
 model InventoryReservation {
   id String @id @default(uuid())
 
@@ -1430,6 +1443,7 @@ model InventoryReservation {
   purpose String?
 
   requesterUserId String?
+  requesterName   String?
   responsibleName String?
 
   status InventoryReservationStatus @default(PENDING)
@@ -1491,7 +1505,12 @@ model InventoryMovement {
   purpose String?
   notes   String?
 
-  createdById String?
+  createdById     String?
+  createdBy       User?             @relation("InventoryMovementsCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  responsibleName String?
+
+  requiresReturn Boolean @default(false)
+  returnedQty    Int     @default(0)
 
   item        InventoryItem         @relation(fields: [itemId], references: [id])
   reservation InventoryReservation? @relation(fields: [reservationId], references: [id])

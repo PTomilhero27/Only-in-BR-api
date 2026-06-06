@@ -11,6 +11,7 @@ import { AuditService } from 'src/common/audit/audit.service';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { ListInventoryItemsDto } from './dto/list-inventory-items.dto';
+import { CreateInventoryCategoryDto } from './dto/create-category.dto';
 import {
   CheckInventoryAvailabilityItemDto,
 } from './dto/availability.dto';
@@ -63,7 +64,13 @@ export class InventoryService {
           minQuantity,
           status,
           notes: dto.notes,
+          categories: dto.categoryIds ? {
+            connect: dto.categoryIds.map(id => ({ id }))
+          } : undefined,
         },
+        include: {
+          categories: true
+        }
       });
 
       await this.audit.log(tx, {
@@ -89,12 +96,22 @@ export class InventoryService {
     if (query.search) {
       where.name = { contains: query.search, mode: 'insensitive' };
     }
-    if (query.category) where.category = query.category;
+    if (query.category) {
+      where.categories = {
+        some: {
+          OR: [
+            { id: query.category },
+            { name: { contains: query.category, mode: 'insensitive' } }
+          ]
+        }
+      };
+    }
     if (query.status) where.status = query.status;
 
     if (query.lowStock) {
       const all = await this.prisma.inventoryItem.findMany({
         where,
+        include: { categories: true },
         orderBy: [{ status: 'asc' }, { name: 'asc' }],
       });
       const filtered = all.filter((item) => item.quantity <= item.minQuantity);
@@ -105,6 +122,7 @@ export class InventoryService {
     const [items, total] = await Promise.all([
       this.prisma.inventoryItem.findMany({
         where,
+        include: { categories: true },
         orderBy: { name: 'asc' },
         skip: (page - 1) * perPage,
         take: perPage,
@@ -122,6 +140,7 @@ export class InventoryService {
     const item = await this.prisma.inventoryItem.findUnique({
       where: { id },
       include: {
+        categories: true,
         movements: { orderBy: { createdAt: 'desc' }, take: 10 },
         reservationItems: {
           where: { reservation: { status: { in: this.blockingReservationStatuses } } },
@@ -183,7 +202,13 @@ export class InventoryService {
           minQuantity,
           status,
           notes: dto.notes,
+          categories: dto.categoryIds ? {
+            set: dto.categoryIds.map(id => ({ id }))
+          } : undefined,
         },
+        include: {
+          categories: true
+        }
       });
 
       await this.audit.log(tx, {
@@ -216,14 +241,15 @@ export class InventoryService {
     }
     const allowedManualTypes: InventoryMovementType[] = [
       InventoryMovementType.IN,
+      InventoryMovementType.OUT,
       InventoryMovementType.ADJUSTMENT,
       InventoryMovementType.DAMAGE,
     ];
     if (!allowedManualTypes.includes(dto.type)) {
-      throw new BadRequestException('Movimentacao manual permite apenas IN, ADJUSTMENT ou DAMAGE.');
+      throw new BadRequestException('Movimentacao manual permite apenas IN, OUT, ADJUSTMENT ou DAMAGE.');
     }
     if (dto.type !== InventoryMovementType.ADJUSTMENT && dto.quantity <= 0) {
-      throw new BadRequestException('Entrada e dano manual exigem quantidade maior que zero.');
+      throw new BadRequestException('Entrada, saída e dano manual exigem quantidade maior que zero.');
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -235,6 +261,8 @@ export class InventoryService {
         purpose: dto.purpose,
         notes: dto.notes,
         createdById: actorUserId,
+        requiresReturn: dto.requiresReturn ?? false,
+        responsibleName: dto.responsibleName,
       });
 
       await this.audit.log(tx, {
@@ -247,6 +275,52 @@ export class InventoryService {
       });
 
       return this.toMovementSummary(movement);
+    });
+  }
+
+  async returnManualMovement(movementId: string, quantity: number, actorUserId: string, finalize?: boolean) {
+    return this.prisma.$transaction(async (tx) => {
+      const movement = await tx.inventoryMovement.findUnique({
+        where: { id: movementId },
+        include: { item: true }
+      });
+      if (!movement) throw new NotFoundException('Movimentacao nao encontrada.');
+      if (!movement.requiresReturn) {
+        throw new BadRequestException('Esta movimentacao nao foi marcada para devolucao.');
+      }
+      if (quantity <= 0) {
+        throw new BadRequestException('A quantidade devolvida deve ser maior que zero.');
+      }
+
+      const newReturnedQty = movement.returnedQty + quantity;
+      const shouldFinalize = finalize || newReturnedQty >= movement.quantity;
+
+      const updatedMovement = await tx.inventoryMovement.update({
+        where: { id: movementId },
+        data: {
+          returnedQty: newReturnedQty,
+          requiresReturn: shouldFinalize ? false : movement.requiresReturn
+        }
+      });
+
+      const returnMovement = await this.createMovementAndUpdateQuantity(tx, {
+        itemId: movement.itemId,
+        type: InventoryMovementType.RETURN,
+        quantity,
+        notes: `Devolucao referente a saida manual #${movementId.slice(0, 8)}.`,
+        createdById: actorUserId,
+      });
+
+      await this.audit.log(tx, {
+        action: AuditAction.UPDATE,
+        entity: AuditEntity.INVENTORY_MOVEMENT,
+        entityId: movementId,
+        actorUserId,
+        after: updatedMovement,
+        meta: { manualReturn: true, returnMovementId: returnMovement.id }
+      });
+
+      return this.toMovementSummary(updatedMovement);
     });
   }
 
@@ -301,6 +375,8 @@ export class InventoryService {
       notes?: string | null;
       createdById?: string | null;
       affectsStock?: boolean;
+      requiresReturn?: boolean;
+      responsibleName?: string | null;
     },
   ) {
     const item = await tx.inventoryItem.findUnique({ where: { id: params.itemId } });
@@ -323,6 +399,9 @@ export class InventoryService {
         purpose: params.purpose ?? null,
         notes: params.notes ?? null,
         createdById: params.createdById ?? null,
+        requiresReturn: params.requiresReturn ?? false,
+        returnedQty: 0,
+        responsibleName: params.responsibleName ?? null,
       },
       include: { item: { select: { name: true } } },
     });
@@ -383,6 +462,7 @@ export class InventoryService {
       id: item.id,
       name: item.name,
       category: item.category,
+      categories: item.categories ? item.categories.map((c: any) => ({ id: c.id, name: c.name })) : [],
       unit: item.unit,
       imageUrl: item.imageUrl,
       location: item.location,
@@ -407,7 +487,58 @@ export class InventoryService {
       purpose: movement.purpose,
       notes: movement.notes,
       createdById: movement.createdById,
+      responsibleName: movement.responsibleName,
+      requiresReturn: movement.requiresReturn,
+      returnedQty: movement.returnedQty,
       createdAt: movement.createdAt?.toISOString?.() ?? movement.createdAt,
     };
+  }
+  async listCategories() {
+    return this.prisma.inventoryCategory.findMany({
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async createCategory(dto: CreateInventoryCategoryDto, actorUserId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const name = dto.name.trim();
+      const existing = await tx.inventoryCategory.findUnique({ where: { name } });
+      if (existing) {
+        throw new BadRequestException('Uma categoria com este nome ja existe.');
+      }
+      const category = await tx.inventoryCategory.create({
+        data: { name },
+      });
+      await this.audit.log(tx, {
+        action: AuditAction.CREATE,
+        entity: AuditEntity.INVENTORY_ITEM,
+        entityId: category.id,
+        actorUserId,
+        after: category,
+      });
+      return category;
+    });
+  }
+
+  async deleteCategory(id: string, actorUserId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const category = await tx.inventoryCategory.findUnique({
+        where: { id },
+        include: { items: { select: { id: true } } }
+      });
+      if (!category) throw new NotFoundException('Categoria nao encontrada.');
+      if (category.items.length > 0) {
+        throw new BadRequestException('Nao e possivel deletar uma categoria associada a itens de estoque.');
+      }
+      await tx.inventoryCategory.delete({ where: { id } });
+      await this.audit.log(tx, {
+        action: AuditAction.DELETE,
+        entity: AuditEntity.INVENTORY_ITEM,
+        entityId: id,
+        actorUserId,
+        before: category,
+      });
+      return { success: true };
+    });
   }
 }

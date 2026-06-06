@@ -36,6 +36,15 @@ export class InventoryMovementResponseDto {
   @ApiPropertyOptional({ example: 'user_id' })
   createdById?: string | null;
 
+  @ApiPropertyOptional({ example: 'Joao da Silva' })
+  responsibleName?: string | null;
+
+  @ApiProperty({ example: false })
+  requiresReturn!: boolean;
+
+  @ApiProperty({ example: 0 })
+  returnedQty!: number;
+
   @ApiProperty({ example: '2026-05-15T19:00:00.000Z' })
   createdAt!: string;
 }

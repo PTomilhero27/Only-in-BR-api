@@ -20,11 +20,16 @@ export class CreateInventoryItemDto {
   @MaxLength(160)
   name!: string;
 
-  @ApiPropertyOptional({ example: 'Bebidas', description: 'Categoria livre para filtros.' })
+  @ApiPropertyOptional({ example: 'Bebidas', description: 'Categoria livre (texto/retrocompatibilidade).' })
   @IsOptional()
   @IsString()
   @MaxLength(120)
   category?: string;
+
+  @ApiPropertyOptional({ example: ['uuid-cat-1'], description: 'Lista de IDs de categorias do banco.' })
+  @IsOptional()
+  @IsString({ each: true })
+  categoryIds?: string[];
 
   @ApiPropertyOptional({ example: 'UN', description: 'Unidade de medida exibida no estoque.' })
   @IsOptional()
