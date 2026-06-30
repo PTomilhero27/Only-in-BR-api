@@ -111,4 +111,20 @@ export class ContractManagementController {
   remove(@Param('id') id: string) {
     return this.service.deleteContract(id);
   }
+
+  @Post(':id/reset')
+  @ApiOperation({
+    summary: 'Reiniciar fluxo de contrato',
+    description:
+      'Exclui o PDF do Storage, cancela o fluxo de assinatura na Assinafy e reseta status/campos do contrato, ' +
+      'permitindo gerar/upload de um novo contrato.',
+  })
+  @ApiParam({ name: 'id', description: 'ID do contrato' })
+  @ApiResponse({ status: 200, description: 'Fluxo do contrato reiniciado com sucesso.' })
+  @ApiResponse({ status: 400, description: 'Não é possível reiniciar fluxo (contrato assinado).' })
+  @ApiResponse({ status: 404, description: 'Contrato não encontrado.' })
+  reset(@Param('id') id: string) {
+    return this.service.resetContract(id);
+  }
 }
+

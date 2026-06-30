@@ -5,9 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ContractType, FairStatus } from '@prisma/client';
+import { ContractType, FairStatus, OwnerFairStatus } from '@prisma/client';
 import { CreateContractDto } from '../dto/contracts/create-contract.dto';
 import { AddFairLinkDto } from '../dto/contracts/add-fair-link.dto';
+import { ContractsStorageService } from './contracts-storage.service';
+import { ContractsAssinafyService } from './contracts-assinafy.service';
+
 
 /**
  * ContractManagementService
@@ -24,7 +27,11 @@ import { AddFairLinkDto } from '../dto/contracts/add-fair-link.dto';
  */
 @Injectable()
 export class ContractManagementService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: ContractsStorageService,
+    private readonly assinafy: ContractsAssinafyService,
+  ) {}
 
   /**
    * Cria um contrato com tipo específico.
@@ -388,4 +395,98 @@ export class ContractManagementService {
       where: { id: contractId },
     });
   }
+
+  /**
+   * Reinicia o fluxo de um contrato (deleta o PDF e cancela a assinatura no Assinafy).
+   */
+  async resetContract(contractId: string): Promise<{ success: boolean }> {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id: contractId },
+      select: {
+        id: true,
+        pdfPath: true,
+        signedAt: true,
+        assinafyDocumentId: true,
+        ownerFairId: true,
+      },
+    });
+
+    if (!contract) {
+      throw new NotFoundException('Contrato não encontrado.');
+    }
+
+    if (contract.signedAt) {
+      throw new BadRequestException(
+        'Não é possível reiniciar o fluxo de um contrato já assinado.',
+      );
+    }
+
+    // 1) Deletar PDF do Supabase Storage se existir
+    if (contract.pdfPath) {
+      await this.storage.deleteContractPdf(contract.pdfPath);
+    }
+
+    // 2) Tentar cancelar o fluxo de assinatura no Assinafy se existir
+    if (contract.assinafyDocumentId) {
+      await this.assinafy.cancelDocument(contract.assinafyDocumentId);
+    }
+
+    // 3) Atualizar banco de dados em uma transação
+    await this.prisma.$transaction(async (tx) => {
+      // Limpar campos de geração do contrato
+      await tx.contract.update({
+        where: { id: contractId },
+        data: {
+          pdfPath: null,
+          assinafyDocumentId: null,
+          assinafySignerId: null,
+          signUrl: null,
+          signUrlExpiresAt: null,
+        },
+      });
+
+      // Limpar sinalizador de assinatura no vínculo do expositor
+      await tx.ownerFair.update({
+        where: { id: contract.ownerFairId },
+        data: {
+          contractSignedAt: null,
+        },
+      });
+
+      // Recalcular o status operacional do OwnerFair
+      const ownerFair = await tx.ownerFair.findUnique({
+        where: { id: contract.ownerFairId },
+        include: {
+          stallFairs: true,
+          ownerFairPurchases: true,
+        },
+      });
+
+      if (ownerFair) {
+        const purchases = ownerFair.ownerFairPurchases || [];
+        const totalCents = purchases.reduce((acc, p) => acc + (p.totalCents ?? 0), 0);
+        const paidCents = purchases.reduce((acc, p) => acc + (p.paidCents ?? 0), 0);
+        const remainingCents = Math.max(0, totalCents - paidCents);
+
+        const isFullyPaid = remainingCents === 0;
+
+        let nextStatus: OwnerFairStatus;
+        if (!isFullyPaid) {
+          nextStatus = OwnerFairStatus.AGUARDANDO_PAGAMENTO;
+        } else {
+          nextStatus = OwnerFairStatus.AGUARDANDO_ASSINATURA;
+        }
+
+        if (ownerFair.status !== nextStatus) {
+          await tx.ownerFair.update({
+            where: { id: ownerFair.id },
+            data: { status: nextStatus },
+          });
+        }
+      }
+    });
+
+    return { success: true };
+  }
 }
+

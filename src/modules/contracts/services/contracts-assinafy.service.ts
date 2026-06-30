@@ -884,4 +884,34 @@ export class ContractsAssinafyService {
       reused: false,
     };
   }
+
+  /**
+   * Cancela/deleta o documento na Assinafy.
+   */
+  async cancelDocument(documentId: string): Promise<void> {
+    const baseUrl = this.assinafyBaseUrl();
+    const apiKey = this.assinafyKey();
+
+    try {
+      const res = await fetch(`${baseUrl}/documents/${documentId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: 'application/json',
+        },
+      });
+
+      if (!res.ok) {
+        console.warn(
+          `[ContractsAssinafyService] Falha ao cancelar documento ${documentId} na Assinafy. Status: ${res.status}`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `[ContractsAssinafyService] Erro ao conectar com Assinafy para cancelar documento ${documentId}:`,
+        error,
+      );
+    }
+  }
 }
+

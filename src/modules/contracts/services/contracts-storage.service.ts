@@ -274,4 +274,20 @@ export class ContractsStorageService {
       signedUrl: signed?.signedUrl,
     } as any;
   }
+
+  /**
+   * Deleta o PDF do contrato do Supabase Storage.
+   */
+  async deleteContractPdf(pdfPath: string): Promise<void> {
+    const { error } = await this.supabase.storage
+      .from(this.bucketName)
+      .remove([pdfPath]);
+
+    if (error) {
+      console.warn(
+        `[ContractsStorageService] Falha ao excluir PDF ${pdfPath} do Storage: ${error.message}`,
+      );
+    }
+  }
 }
+
